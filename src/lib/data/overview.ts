@@ -1,7 +1,7 @@
 // Overview data - aggregates from all brands with live WooCommerce + GA4 data
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
-import { getGA4Service } from '../services/ga4';
+import { getFirebloodGA4, getTopgGA4, getDngGA4 } from '../services/ga4';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -46,9 +46,11 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const firebloodWoo = getFirebloodWoo();
   const topgWoo = getTopgWoo();
   const dngWoo = getDngWoo();
-  const ga4 = getGA4Service();
+  const firebloodGA4 = getFirebloodGA4();
+  const topgGA4 = getTopgGA4();
+  const dngGA4 = getDngGA4();
   
-  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || ga4;
+  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || firebloodGA4 || topgGA4 || dngGA4;
   
   if (!hasAnyApi) {
     console.log('Using mock overview data - no APIs configured');
@@ -56,12 +58,16 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   }
   
   try {
-    const [firebloodStats, topgStats, dngStats, ga4Stats, ga4Channels] = await Promise.all([
+    const [
+      firebloodStats, topgStats, dngStats,
+      fbGA4, topgGA4Stats, dngGA4Stats
+    ] = await Promise.all([
       firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
       topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
       dngWoo ? dngWoo.getOrderStats(period, dateRange) : null,
-      ga4 ? ga4.getTrafficStats(period, dateRange) : null,
-      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
+      firebloodGA4 ? firebloodGA4.getTrafficStats(period, dateRange) : null,
+      topgGA4 ? topgGA4.getTrafficStats(period, dateRange) : null,
+      dngGA4 ? dngGA4.getTrafficStats(period, dateRange) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -74,13 +80,17 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const dngOrders = dngStats?.orders || 0;
     const totalOrders = fbOrders + topgOrders + dngOrders;
     
+    // Aggregate sessions from all GA4 properties
+    const totalSessions = (fbGA4?.sessions || 0) + (topgGA4Stats?.sessions || 0) + (dngGA4Stats?.sessions || 0);
+    const hasGA4 = fbGA4 || topgGA4Stats || dngGA4Stats;
+    
     const periodLabel = period === 'custom' && dateRange 
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
     
-    // Calculate conversion rate if we have GA4 data
-    const conversionRate = ga4Stats && ga4Stats.sessions > 0 
-      ? ((totalOrders / ga4Stats.sessions) * 100).toFixed(2)
+    // Calculate blended conversion rate
+    const conversionRate = hasGA4 && totalSessions > 0 
+      ? ((totalOrders / totalSessions) * 100).toFixed(2)
       : null;
     
     const realMetrics = [
@@ -120,15 +130,15 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!dngStats 
       },
       { 
-        label: 'Sessions', 
-        value: ga4Stats ? ga4Stats.sessions.toLocaleString() : 'N/A', 
-        change: ga4Stats ? 'LIVE' : 'GA4 not connected', 
+        label: 'Total Sessions', 
+        value: hasGA4 ? totalSessions.toLocaleString() : 'N/A', 
+        change: hasGA4 ? 'LIVE' : 'GA4 not connected', 
         changeType: 'positive', 
-        status: ga4Stats ? 'good' : 'warning',
-        isLive: !!ga4Stats 
+        status: hasGA4 ? 'good' : 'warning',
+        isLive: !!hasGA4 
       },
       { 
-        label: 'Conversion Rate', 
+        label: 'Blended Conv Rate', 
         value: conversionRate ? `${conversionRate}%` : 'N/A', 
         change: conversionRate ? 'LIVE' : 'Need GA4', 
         changeType: 'positive', 
@@ -147,16 +157,14 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       metrics: realMetrics,
       revenueTrend: mockData.revenueTrend,
       brandBreakdown: realBrandBreakdown,
-      channelData: ga4Channels,
       dataSource: 'live',
       period,
       dateRange,
       liveMetrics: {
-        fireblood: firebloodStats,
-        topg: topgStats,
-        dng: dngStats,
-        ga4: ga4Stats,
-        total: { revenue: totalRev, orders: totalOrders },
+        fireblood: { woo: firebloodStats, ga4: fbGA4 },
+        topg: { woo: topgStats, ga4: topgGA4Stats },
+        dng: { woo: dngStats, ga4: dngGA4Stats },
+        total: { revenue: totalRev, orders: totalOrders, sessions: totalSessions },
       },
     };
   } catch (error) {

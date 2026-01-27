@@ -38,13 +38,12 @@ export class GA4Service {
   }
 
   private getDateRange(period: Period, customRange?: DateRange): { startDate: string; endDate: string } {
-    const now = new Date();
-    let startDate: string;
-    const endDate = 'today';
-
     if (period === 'custom' && customRange) {
       return { startDate: customRange.start, endDate: customRange.end };
     }
+
+    let startDate: string;
+    const endDate = 'today';
 
     switch (period) {
       case 'today':
@@ -81,8 +80,6 @@ export class GA4Service {
             { name: 'bounceRate' },
             { name: 'averageSessionDuration' },
             { name: 'screenPageViews' },
-            { name: 'conversions' },
-            { name: 'ecommercePurchases' },
           ],
         },
       });
@@ -96,44 +93,9 @@ export class GA4Service {
         bounceRate: parseFloat(row[3]?.value || '0') * 100,
         avgSessionDuration: parseFloat(row[4]?.value || '0'),
         pageViews: parseInt(row[5]?.value || '0'),
-        conversions: parseInt(row[6]?.value || '0'),
-        purchases: parseInt(row[7]?.value || '0'),
       };
     } catch (error) {
       console.error('GA4 getTrafficStats error:', error);
-      throw error;
-    }
-  }
-
-  async getTrafficBySource(period: Period = 'month', customRange?: DateRange) {
-    const { startDate, endDate } = this.getDateRange(period, customRange);
-
-    try {
-      const response = await this.analyticsDataClient.properties.runReport({
-        property: `properties/${this.propertyId}`,
-        requestBody: {
-          dateRanges: [{ startDate, endDate }],
-          dimensions: [{ name: 'sessionSource' }],
-          metrics: [
-            { name: 'sessions' },
-            { name: 'totalUsers' },
-            { name: 'conversions' },
-            { name: 'ecommercePurchases' },
-          ],
-          orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-          limit: 10,
-        },
-      });
-
-      return response.data.rows?.map((row: any) => ({
-        source: row.dimensionValues[0].value,
-        sessions: parseInt(row.metricValues[0].value),
-        users: parseInt(row.metricValues[1].value),
-        conversions: parseInt(row.metricValues[2].value),
-        purchases: parseInt(row.metricValues[3].value),
-      })) || [];
-    } catch (error) {
-      console.error('GA4 getTrafficBySource error:', error);
       throw error;
     }
   }
@@ -151,8 +113,6 @@ export class GA4Service {
             { name: 'sessions' },
             { name: 'totalUsers' },
             { name: 'conversions' },
-            { name: 'ecommercePurchases' },
-            { name: 'purchaseRevenue' },
           ],
           orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
           limit: 10,
@@ -164,54 +124,20 @@ export class GA4Service {
         sessions: parseInt(row.metricValues[0].value),
         users: parseInt(row.metricValues[1].value),
         conversions: parseInt(row.metricValues[2].value),
-        purchases: parseInt(row.metricValues[3].value),
-        revenue: parseFloat(row.metricValues[4].value),
       })) || [];
     } catch (error) {
       console.error('GA4 getTrafficByChannel error:', error);
       throw error;
     }
   }
-
-  async getDailyTrend(period: Period = 'month', customRange?: DateRange) {
-    const { startDate, endDate } = this.getDateRange(period, customRange);
-
-    try {
-      const response = await this.analyticsDataClient.properties.runReport({
-        property: `properties/${this.propertyId}`,
-        requestBody: {
-          dateRanges: [{ startDate, endDate }],
-          dimensions: [{ name: 'date' }],
-          metrics: [
-            { name: 'sessions' },
-            { name: 'totalUsers' },
-            { name: 'purchaseRevenue' },
-          ],
-          orderBys: [{ dimension: { dimensionName: 'date' }, desc: false }],
-        },
-      });
-
-      return response.data.rows?.map((row: any) => ({
-        date: row.dimensionValues[0].value,
-        sessions: parseInt(row.metricValues[0].value),
-        users: parseInt(row.metricValues[1].value),
-        revenue: parseFloat(row.metricValues[2].value),
-      })) || [];
-    } catch (error) {
-      console.error('GA4 getDailyTrend error:', error);
-      throw error;
-    }
-  }
 }
 
-// Factory function
-export function getGA4Service(): GA4Service | null {
-  const propertyId = process.env.GA4_PROPERTY_ID;
+// Factory functions for each brand
+function createGA4Service(propertyId: string | undefined): GA4Service | null {
   const clientEmail = process.env.GA4_CLIENT_EMAIL;
   const privateKey = process.env.GA4_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (!propertyId || !clientEmail || !privateKey) {
-    console.log('GA4 not configured - missing env vars');
     return null;
   }
 
@@ -222,4 +148,21 @@ export function getGA4Service(): GA4Service | null {
       private_key: privateKey,
     },
   });
+}
+
+export function getFirebloodGA4(): GA4Service | null {
+  return createGA4Service(process.env.GA4_FIREBLOOD_PROPERTY_ID);
+}
+
+export function getTopgGA4(): GA4Service | null {
+  return createGA4Service(process.env.GA4_TOPG_PROPERTY_ID);
+}
+
+export function getDngGA4(): GA4Service | null {
+  return createGA4Service(process.env.GA4_DNG_PROPERTY_ID);
+}
+
+// Legacy function for backwards compatibility
+export function getGA4Service(): GA4Service | null {
+  return getFirebloodGA4();
 }

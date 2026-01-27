@@ -1,6 +1,7 @@
-// Gtop data - pulls from real WooCommerce API when configured
+// Gtop data - pulls from real WooCommerce + GA4 APIs when configured
 
 import { getTopgWoo } from '../services/woocommerce';
+import { getTopgGA4 } from '../services/ga4';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -17,6 +18,14 @@ interface Metric {
   status: string;
   isLive?: boolean;
 }
+
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+  custom: 'Custom Range',
+};
 
 const mockData = {
   metrics: [
@@ -52,48 +61,68 @@ const mockData = {
   ],
 };
 
-const periodLabels: Record<Period, string> = {
-  today: 'Today',
-  week: 'This Week',
-  month: 'This Month',
-  year: 'This Year',
-  custom: 'Custom Range',
-};
-
 export async function getGtopData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getTopgWoo();
+  const ga4 = getTopgGA4();
   
-  if (!woo) {
-    console.log('Using mock Gtop data - WooCommerce not configured');
+  if (!woo && !ga4) {
+    console.log('Using mock Gtop data - APIs not configured');
     return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    const periodStats = await woo.getOrderStats(period, dateRange);
+    const [periodStats, ga4Stats, ga4Channels] = await Promise.all([
+      woo ? woo.getOrderStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
+    ]);
     
     const periodLabel = period === 'custom' && dateRange 
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
     
+    const revenue = periodStats?.revenue || 0;
+    const orders = periodStats?.orders || 0;
+    const sessions = ga4Stats?.sessions || 0;
+    const convRate = sessions > 0 ? ((orders / sessions) * 100).toFixed(2) : '0';
+    
     const realMetrics: Metric[] = [
-      { label: `Revenue (${periodLabel})`, value: `£${periodStats.revenue.toLocaleString()}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
-      { label: 'Orders', value: periodStats.orders.toLocaleString(), change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
-      { label: 'AOV', value: `£${periodStats.avgOrderValue.toFixed(2)}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
-      ...mockData.metrics.slice(3).map(m => ({ ...m, isLive: false })),
+      { label: `Revenue (${periodLabel})`, value: `£${revenue.toLocaleString()}`, change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
+      { label: 'Orders', value: orders.toLocaleString(), change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
+      { label: 'AOV', value: periodStats ? `£${periodStats.avgOrderValue.toFixed(2)}` : 'N/A', change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
+      { label: 'Conversion Rate', value: `${convRate}%`, change: ga4Stats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!ga4Stats },
+      { label: 'Sessions', value: sessions.toLocaleString(), change: ga4Stats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!ga4Stats },
+      { label: 'Bounce Rate', value: ga4Stats ? `${ga4Stats.bounceRate.toFixed(1)}%` : 'N/A', change: ga4Stats ? 'LIVE' : 'N/A', changeType: 'neutral', status: 'good', isLive: !!ga4Stats },
     ];
+    
+    // Use real GA4 channel data if available
+    const realChannelEconomics = ga4Channels && ga4Channels.length > 0
+      ? ga4Channels.map((ch: any) => ({
+          channel: ch.channel,
+          sessions: ch.sessions,
+          users: ch.users,
+          conversions: ch.conversions,
+          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(2) : 0,
+          status: ch.sessions > 5000 ? 'scale' : ch.sessions > 1000 ? 'watch' : 'fix',
+          isLive: true,
+        }))
+      : mockData.channelEconomics;
     
     return {
       metrics: realMetrics,
-      channelEconomics: mockData.channelEconomics,
+      channelEconomics: realChannelEconomics,
       trafficTrend: mockData.trafficTrend,
       topProducts: mockData.topProducts,
+      ga4Stats,
       dataSource: 'live',
       period,
       dateRange,
       liveMetrics: {
-        revenue: periodStats.revenue,
-        orders: periodStats.orders,
-        avgOrderValue: periodStats.avgOrderValue,
+        revenue,
+        orders,
+        avgOrderValue: periodStats?.avgOrderValue || 0,
+        sessions,
+        conversionRate: convRate,
       },
     };
   } catch (error) {

@@ -1,6 +1,7 @@
-// Fireblood data - pulls from real WooCommerce API when configured
+// Fireblood data - pulls from real WooCommerce + GA4 APIs when configured
 
 import { getFirebloodWoo } from '../services/woocommerce';
+import { getFirebloodGA4 } from '../services/ga4';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -8,6 +9,14 @@ interface DateRange {
   start: string;
   end: string;
 }
+
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+  custom: 'Custom Range',
+};
 
 const mockData = {
   channelRevenue: [
@@ -61,20 +70,32 @@ const mockData = {
 
 export async function getFirebloodData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getFirebloodWoo();
+  const ga4 = getFirebloodGA4();
   
-  if (!woo) {
-    console.log('Using mock Fireblood data - WooCommerce not configured');
+  if (!woo && !ga4) {
+    console.log('Using mock Fireblood data - APIs not configured');
     return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    const [periodStats, subscriptionStats] = await Promise.all([
-      woo.getOrderStats(period, dateRange),
-      woo.getSubscriptionStats(),
+    const [periodStats, subscriptionStats, ga4Stats, ga4Channels] = await Promise.all([
+      woo ? woo.getOrderStats(period, dateRange) : null,
+      woo ? woo.getSubscriptionStats() : null,
+      ga4 ? ga4.getTrafficStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
     
-    const dtcRevenue = Math.round(periodStats.revenue);
-    const dtcOrders = periodStats.orders;
+    const dtcRevenue = periodStats ? Math.round(periodStats.revenue) : 0;
+    const dtcOrders = periodStats?.orders || 0;
+    
+    const periodLabel = period === 'custom' && dateRange 
+      ? `${dateRange.start} - ${dateRange.end}`
+      : periodLabels[period];
+    
+    // Calculate conversion rate
+    const convRate = ga4Stats && ga4Stats.sessions > 0 
+      ? ((dtcOrders / ga4Stats.sessions) * 100).toFixed(2)
+      : null;
     
     const realChannelRevenue = [
       { 
@@ -89,6 +110,19 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
       ...mockData.channelRevenue.slice(1).map(c => ({ ...c, isLive: false })),
     ];
     
+    // Merge GA4 channel data with mock economics
+    const realChannelEconomics = ga4Channels && ga4Channels.length > 0
+      ? ga4Channels.map((ch: any) => ({
+          channel: ch.channel,
+          sessions: ch.sessions,
+          users: ch.users,
+          conversions: ch.conversions,
+          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(2) : 0,
+          status: ch.conversions > 50 ? 'scale' : ch.conversions > 10 ? 'watch' : 'fix',
+          isLive: true,
+        }))
+      : mockData.channelEconomics;
+    
     const realSubscriptionMetrics = subscriptionStats ? {
       ...mockData.subscriptionMetrics,
       activeSubscribers: subscriptionStats.activeSubscribers,
@@ -98,18 +132,21 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
     
     return {
       channelRevenue: realChannelRevenue,
-      channelEconomics: mockData.channelEconomics,
+      channelEconomics: realChannelEconomics,
       subscriptionMetrics: realSubscriptionMetrics,
       subscriptionTrends: mockData.subscriptionTrends,
       acquirerScorecard: mockData.acquirerScorecard,
+      ga4Stats,
       dataSource: 'live',
       period,
       dateRange,
       liveMetrics: {
-        dtcRevenue: dtcRevenue,
-        dtcOrders: dtcOrders,
-        avgOrderValue: Math.round(periodStats.avgOrderValue),
+        dtcRevenue,
+        dtcOrders,
+        avgOrderValue: periodStats ? Math.round(periodStats.avgOrderValue) : 0,
         subscriptions: subscriptionStats,
+        sessions: ga4Stats?.sessions,
+        conversionRate: convRate,
       },
     };
   } catch (error) {

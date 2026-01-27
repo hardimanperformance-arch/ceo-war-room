@@ -1,7 +1,8 @@
-// DNG Comics data - pulls from real WooCommerce and Sendlane APIs when configured
+// DNG Comics data - pulls from real WooCommerce, Sendlane + GA4 APIs when configured
 
 import { getDngWoo } from '../services/woocommerce';
 import { getSendlane } from '../services/sendlane';
+import { getDngGA4 } from '../services/ga4';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -18,6 +19,14 @@ interface Metric {
   status: string;
   isLive?: boolean;
 }
+
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+  custom: 'Custom Range',
+};
 
 const mockData = {
   metrics: [
@@ -52,70 +61,108 @@ const mockData = {
   ],
 };
 
-const periodLabels: Record<Period, string> = {
-  today: 'Today',
-  week: 'This Week',
-  month: 'This Month',
-  year: 'This Year',
-  custom: 'Custom Range',
-};
-
 export async function getDngData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getDngWoo();
   const sendlane = getSendlane();
+  const ga4 = getDngGA4();
   
-  if (!woo && !sendlane) {
+  if (!woo && !sendlane && !ga4) {
     console.log('Using mock DNG data - APIs not configured');
     return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    const [wooStats, sendlaneStats] = await Promise.all([
+    const [wooStats, sendlaneStats, ga4Stats, ga4Channels] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       sendlane ? sendlane.getTotalSubscribers() : null,
+      ga4 ? ga4.getTrafficStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
-    
-    const realMetrics: Metric[] = [...mockData.metrics];
     
     const periodLabel = period === 'custom' && dateRange 
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
     
-    if (wooStats) {
-      realMetrics[0] = { 
-        label: `Revenue (${periodLabel})`, 
-        value: `£${wooStats.revenue.toLocaleString()}`, 
-        change: 'LIVE', 
-        changeType: 'positive', 
-        status: 'good',
-        isLive: true 
-      };
-    }
+    const revenue = wooStats?.revenue || 0;
+    const sessions = ga4Stats?.sessions || 0;
     
-    if (sendlaneStats) {
-      realMetrics[1] = { 
-        label: 'Email List Size', 
-        value: sendlaneStats.totalSubscribers.toLocaleString(), 
-        change: 'LIVE', 
+    const realMetrics: Metric[] = [
+      { 
+        label: `Revenue (${periodLabel})`, 
+        value: wooStats ? `£${revenue.toLocaleString()}` : 'N/A', 
+        change: wooStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: 'good',
-        isLive: true 
-      };
-    }
+        isLive: !!wooStats 
+      },
+      { 
+        label: 'Email List Size', 
+        value: sendlaneStats ? sendlaneStats.totalSubscribers.toLocaleString() : 'N/A', 
+        change: sendlaneStats ? 'LIVE' : 'Not connected', 
+        changeType: 'positive', 
+        status: 'good',
+        isLive: !!sendlaneStats 
+      },
+      { 
+        label: 'Sessions', 
+        value: ga4Stats ? sessions.toLocaleString() : 'N/A', 
+        change: ga4Stats ? 'LIVE' : 'Not connected', 
+        changeType: 'positive', 
+        status: 'good',
+        isLive: !!ga4Stats 
+      },
+      { 
+        label: 'Page Views', 
+        value: ga4Stats ? ga4Stats.pageViews.toLocaleString() : 'N/A', 
+        change: ga4Stats ? 'LIVE' : 'Not connected', 
+        changeType: 'positive', 
+        status: 'good',
+        isLive: !!ga4Stats 
+      },
+      { 
+        label: 'Bounce Rate', 
+        value: ga4Stats ? `${ga4Stats.bounceRate.toFixed(1)}%` : 'N/A', 
+        change: ga4Stats ? 'LIVE' : 'Not connected', 
+        changeType: 'neutral', 
+        status: ga4Stats && ga4Stats.bounceRate < 50 ? 'good' : 'warning',
+        isLive: !!ga4Stats 
+      },
+      { 
+        label: 'Avg Session', 
+        value: ga4Stats ? `${Math.round(ga4Stats.avgSessionDuration)}s` : 'N/A', 
+        change: ga4Stats ? 'LIVE' : 'Not connected', 
+        changeType: 'positive', 
+        status: 'good',
+        isLive: !!ga4Stats 
+      },
+    ];
+    
+    // Use real GA4 channel data for traffic sources if available
+    const realTrafficSources = ga4Channels && ga4Channels.length > 0
+      ? ga4Channels.map((ch: any) => ({
+          channel: ch.channel,
+          sessions: ch.sessions,
+          signups: ch.conversions,
+          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(1) : 0,
+          isLive: true,
+        }))
+      : mockData.trafficSources;
     
     return {
       metrics: realMetrics,
       launches: mockData.launches,
       listGrowth: mockData.listGrowth,
-      trafficSources: mockData.trafficSources,
-      dataSource: wooStats || sendlaneStats ? 'live' : 'mock',
+      trafficSources: realTrafficSources,
+      ga4Stats,
+      dataSource: wooStats || sendlaneStats || ga4Stats ? 'live' : 'mock',
       period,
       dateRange,
       liveMetrics: {
-        revenue: wooStats?.revenue,
+        revenue,
         orders: wooStats?.orders,
         totalSubscribers: sendlaneStats?.totalSubscribers,
-        lists: sendlaneStats?.lists,
+        sessions,
+        pageViews: ga4Stats?.pageViews,
       },
     };
   } catch (error) {
