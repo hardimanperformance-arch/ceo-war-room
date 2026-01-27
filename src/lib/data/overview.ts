@@ -2,7 +2,12 @@
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 
-type Period = 'today' | 'week' | 'month' | 'year';
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 const mockData = {
   metrics: [
@@ -33,9 +38,10 @@ const periodLabels: Record<Period, string> = {
   week: 'This Week',
   month: 'This Month',
   year: 'This Year',
+  custom: 'Custom Range',
 };
 
-export async function getOverviewData(period: Period = 'month') {
+export async function getOverviewData(period: Period = 'month', dateRange?: DateRange) {
   const firebloodWoo = getFirebloodWoo();
   const topgWoo = getTopgWoo();
   const dngWoo = getDngWoo();
@@ -47,9 +53,9 @@ export async function getOverviewData(period: Period = 'month') {
   
   try {
     const [firebloodStats, topgStats, dngStats] = await Promise.all([
-      firebloodWoo ? firebloodWoo.getOrderStats(period) : null,
-      topgWoo ? topgWoo.getOrderStats(period) : null,
-      dngWoo ? dngWoo.getOrderStats(period) : null,
+      firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
+      topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
+      dngWoo ? dngWoo.getOrderStats(period, dateRange) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -62,9 +68,13 @@ export async function getOverviewData(period: Period = 'month') {
     const dngOrders = dngStats?.orders || 0;
     const totalOrders = fbOrders + topgOrders + dngOrders;
     
+    const periodLabel = period === 'custom' && dateRange 
+      ? `${dateRange.start} - ${dateRange.end}`
+      : periodLabels[period];
+    
     const realMetrics = [
       { 
-        label: `Total Revenue (${periodLabels[period]})`, 
+        label: `Total Revenue (${periodLabel})`, 
         value: `£${totalRev.toLocaleString()}`, 
         change: 'LIVE', 
         changeType: 'positive', 
@@ -121,6 +131,7 @@ export async function getOverviewData(period: Period = 'month') {
       brandBreakdown: realBrandBreakdown,
       dataSource: 'live',
       period,
+      dateRange,
       liveMetrics: {
         fireblood: firebloodStats,
         topg: topgStats,

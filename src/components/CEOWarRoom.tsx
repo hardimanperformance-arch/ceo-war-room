@@ -5,6 +5,8 @@ import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart
 } from 'recharts';
+import { format } from 'date-fns';
+import TimePeriodSelector from './TimePeriodSelector';
 
 // Types
 interface Metric {
@@ -39,12 +41,18 @@ interface ChannelEconomics {
   status: string;
 }
 
-type TimePeriod = 'today' | 'week' | 'month' | 'year';
+interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+type TimePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export default function CEOWarRoom() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('overview');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month');
+  const [customRange, setCustomRange] = useState<DateRange | null>(null);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,13 +64,17 @@ export default function CEOWarRoom() {
 
   // Fetch data when tab or time period changes
   useEffect(() => {
-    fetchData(activeTab, timePeriod);
-  }, [activeTab, timePeriod]);
+    fetchData(activeTab, timePeriod, customRange);
+  }, [activeTab, timePeriod, customRange]);
 
-  const fetchData = async (tab: string, period: TimePeriod) => {
+  const fetchData = async (tab: string, period: TimePeriod, range: DateRange | null) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?tab=${tab}&period=${period}`);
+      let url = `/api/dashboard?tab=${tab}&period=${period}`;
+      if (period === 'custom' && range) {
+        url += `&startDate=${format(range.start, 'yyyy-MM-dd')}&endDate=${format(range.end, 'yyyy-MM-dd')}`;
+      }
+      const res = await fetch(url);
       const json = await res.json();
       setData(json);
     } catch (error) {
@@ -71,10 +83,13 @@ export default function CEOWarRoom() {
     setLoading(false);
   };
 
-  const brands = {
-    fireblood: { name: 'Fireblood', color: '#FF4757', icon: '🔥' },
-    gtop: { name: 'Gtop', color: '#00E676', icon: '👕' },
-    dng: { name: 'DNG', color: '#AA80FF', icon: '📚' }
+  const handleTimePeriodChange = (period: TimePeriod, range?: DateRange) => {
+    setTimePeriod(period);
+    if (period === 'custom' && range) {
+      setCustomRange(range);
+    } else {
+      setCustomRange(null);
+    }
   };
 
   const tabs = [
@@ -82,13 +97,6 @@ export default function CEOWarRoom() {
     { id: 'fireblood', label: 'Fireblood', icon: '🔥' },
     { id: 'gtop', label: 'Gtop', icon: '👕' },
     { id: 'dng', label: 'DNG', icon: '📚' },
-  ];
-
-  const timePeriods: { id: TimePeriod; label: string }[] = [
-    { id: 'today', label: 'Today' },
-    { id: 'week', label: 'This Week' },
-    { id: 'month', label: 'This Month' },
-    { id: 'year', label: 'This Year' },
   ];
 
   const getStatusColor = (status: string) => {
@@ -552,20 +560,12 @@ export default function CEOWarRoom() {
             </div>
 
             {/* Time Period Selector */}
-            <div className="flex items-center gap-2 bg-zinc-800 rounded-lg p-1">
-              {timePeriods.map((period) => (
-                <button
-                  key={period.id}
-                  onClick={() => setTimePeriod(period.id)}
-                  className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${
-                    timePeriod === period.id
-                      ? 'bg-red-500 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-                  }`}
-                >
-                  {period.label}
-                </button>
-              ))}
+            <div className="py-2">
+              <TimePeriodSelector
+                value={timePeriod}
+                customRange={customRange}
+                onChange={handleTimePeriodChange}
+              />
             </div>
           </div>
         </div>

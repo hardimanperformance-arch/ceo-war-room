@@ -3,7 +3,12 @@
 import { getDngWoo } from '../services/woocommerce';
 import { getSendlane } from '../services/sendlane';
 
-type Period = 'today' | 'week' | 'month' | 'year';
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 interface Metric {
   label: string;
@@ -52,9 +57,10 @@ const periodLabels: Record<Period, string> = {
   week: 'This Week',
   month: 'This Month',
   year: 'This Year',
+  custom: 'Custom Range',
 };
 
-export async function getDngData(period: Period = 'month') {
+export async function getDngData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getDngWoo();
   const sendlane = getSendlane();
   
@@ -65,15 +71,19 @@ export async function getDngData(period: Period = 'month') {
   
   try {
     const [wooStats, sendlaneStats] = await Promise.all([
-      woo ? woo.getOrderStats(period) : null,
+      woo ? woo.getOrderStats(period, dateRange) : null,
       sendlane ? sendlane.getTotalSubscribers() : null,
     ]);
     
     const realMetrics: Metric[] = [...mockData.metrics];
     
+    const periodLabel = period === 'custom' && dateRange 
+      ? `${dateRange.start} - ${dateRange.end}`
+      : periodLabels[period];
+    
     if (wooStats) {
       realMetrics[0] = { 
-        label: `Revenue (${periodLabels[period]})`, 
+        label: `Revenue (${periodLabel})`, 
         value: `£${wooStats.revenue.toLocaleString()}`, 
         change: 'LIVE', 
         changeType: 'positive', 
@@ -100,6 +110,7 @@ export async function getDngData(period: Period = 'month') {
       trafficSources: mockData.trafficSources,
       dataSource: wooStats || sendlaneStats ? 'live' : 'mock',
       period,
+      dateRange,
       liveMetrics: {
         revenue: wooStats?.revenue,
         orders: wooStats?.orders,

@@ -1,182 +1,226 @@
-// WooCommerce API Service
+// WooCommerce API Service for pulling live store data
 
-interface WooConfig {
+interface WooCommerceConfig {
   url: string;
-  key: string;
-  secret: string;
+  consumerKey: string;
+  consumerSecret: string;
 }
 
-interface WooOrder {
+interface Order {
   id: number;
-  status: string;
   total: string;
+  currency: string;
+  status: string;
   date_created: string;
+  billing: {
+    email: string;
+    country: string;
+  };
   line_items: Array<{
-    product_id: number;
     name: string;
     quantity: number;
     total: string;
   }>;
-  billing: {
-    email: string;
-  };
-  meta_data: Array<{
-    key: string;
-    value: string;
-  }>;
 }
 
-interface WooSubscription {
+interface Subscription {
   id: number;
   status: string;
   total: string;
   billing_period: string;
   billing_interval: number;
-  next_payment_date: string;
-  date_created: string;
 }
 
+interface DateRange {
+  start: string;
+  end: string;
+}
+
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
 export class WooCommerceService {
-  private config: WooConfig;
-  
-  constructor(config: WooConfig) {
+  private config: WooCommerceConfig;
+
+  constructor(config: WooCommerceConfig) {
     this.config = config;
   }
-  
-  private async fetch(endpoint: string, params: Record<string, string> = {}) {
-    const url = new URL(`${this.config.url}/wp-json/wc/v3/${endpoint}`);
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, value);
-    });
-    
-    const auth = Buffer.from(`${this.config.key}:${this.config.secret}`).toString('base64');
-    
+
+  private getAuthHeader(): string {
+    const credentials = Buffer.from(`${this.config.consumerKey}:${this.config.consumerSecret}`).toString('base64');
+    return `Basic ${credentials}`;
+  }
+
+  private getDateRange(period: Period, customRange?: DateRange): { after: string; before: string } {
+    const now = new Date();
+    let after: Date;
+    let before: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    if (period === 'custom' && customRange) {
+      after = new Date(customRange.start);
+      after.setHours(0, 0, 0, 0);
+      before = new Date(customRange.end);
+      before.setHours(23, 59, 59, 999);
+    } else {
+      switch (period) {
+        case 'today':
+          after = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+          break;
+        case 'week':
+          after = new Date(now);
+          after.setDate(now.getDate() - now.getDay());
+          after.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          after = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+          break;
+        case 'year':
+          after = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+          break;
+        default:
+          after = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      }
+    }
+
+    return {
+      after: after.toISOString(),
+      before: before.toISOString(),
+    };
+  }
+
+  async getOrders(period: Period = 'month', customRange?: DateRange): Promise<Order[]> {
+    const { after, before } = this.getDateRange(period, customRange);
+    const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
+    url.searchParams.set('after', after);
+    url.searchParams.set('before', before);
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('status', 'completed,processing');
+
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Basic ${auth}`,
+        'Authorization': this.getAuthHeader(),
         'Content-Type': 'application/json',
       },
       next: { revalidate: 300 },
     });
-    
+
     if (!response.ok) {
       throw new Error(`WooCommerce API error: ${response.status}`);
     }
-    
+
     return response.json();
   }
-  
-  async getOrders(params: { after?: string; before?: string; per_page?: number; status?: string } = {}): Promise<WooOrder[]> {
-    return this.fetch('orders', {
-      per_page: String(params.per_page || 100),
-      ...(params.after && { after: params.after }),
-      ...(params.before && { before: params.before }),
-      ...(params.status && { status: params.status }),
+
+  async getSubscriptions(): Promise<Subscription[]> {
+    const url = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('status', 'active');
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      next: { revalidate: 300 },
     });
-  }
-  
-  async getSubscriptions(params: { per_page?: number; status?: string } = {}): Promise<WooSubscription[]> {
-    return this.fetch('subscriptions', {
-      per_page: String(params.per_page || 100),
-      ...(params.status && { status: params.status }),
-    });
-  }
-  
-  async getOrderStats(period: 'today' | 'week' | 'month' | 'year' = 'month') {
-    const now = new Date();
-    let after: Date;
-    
-    switch (period) {
-      case 'today':
-        after = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        break;
-      case 'week':
-        after = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        after = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'year':
-        after = new Date(now.getFullYear(), 0, 1);
-        break;
+
+    if (!response.ok) {
+      console.log('Subscriptions API not available or error:', response.status);
+      return [];
     }
+
+    return response.json();
+  }
+
+  async getOrderStats(period: Period = 'month', customRange?: DateRange): Promise<{
+    revenue: number;
+    orders: number;
+    avgOrderValue: number;
+  }> {
+    const orders = await this.getOrders(period, customRange);
     
-    const orders = await this.getOrders({
-      after: after.toISOString(),
-      status: 'completed,processing',
-      per_page: 100,
-    });
-    
-    const totalRevenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
-    const totalOrders = orders.length;
-    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    
+    const revenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
+    const orderCount = orders.length;
+    const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
+
     return {
-      revenue: totalRevenue,
-      orders: totalOrders,
-      avgOrderValue,
-      period,
+      revenue: Math.round(revenue),
+      orders: orderCount,
+      avgOrderValue: Math.round(avgOrderValue * 100) / 100,
     };
   }
-  
-  async getSubscriptionStats() {
+
+  async getSubscriptionStats(): Promise<{
+    activeSubscribers: number;
+    mrr: number;
+  } | null> {
     try {
-      const subscriptions = await this.getSubscriptions({ status: 'active', per_page: 100 });
+      const subscriptions = await this.getSubscriptions();
       
-      const activeCount = subscriptions.length;
+      if (subscriptions.length === 0) {
+        return null;
+      }
+
+      const activeSubscribers = subscriptions.length;
       const mrr = subscriptions.reduce((sum, sub) => {
         const total = parseFloat(sub.total);
-        if (sub.billing_period === 'year') return sum + (total / 12);
-        if (sub.billing_period === 'week') return sum + (total * 4.33);
-        return sum + total;
+        const interval = sub.billing_interval || 1;
+        
+        switch (sub.billing_period) {
+          case 'week':
+            return sum + (total * 4.33 / interval);
+          case 'month':
+            return sum + (total / interval);
+          case 'year':
+            return sum + (total / 12 / interval);
+          default:
+            return sum + total;
+        }
       }, 0);
-      
+
       return {
-        activeSubscribers: activeCount,
+        activeSubscribers,
         mrr: Math.round(mrr),
       };
     } catch (error) {
-      console.error('Subscription fetch error:', error);
+      console.error('Error fetching subscription stats:', error);
       return null;
     }
   }
 }
 
+// Factory functions for each store
 export function getFirebloodWoo(): WooCommerceService | null {
   const url = process.env.WOOCOMMERCE_FIREBLOOD_URL;
   const key = process.env.WOOCOMMERCE_FIREBLOOD_KEY;
   const secret = process.env.WOOCOMMERCE_FIREBLOOD_SECRET;
-  
+
   if (!url || !key || !secret) {
-    console.log('Fireblood WooCommerce not configured');
     return null;
   }
-  
-  return new WooCommerceService({ url, key, secret });
+
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
 }
 
 export function getTopgWoo(): WooCommerceService | null {
   const url = process.env.WOOCOMMERCE_TOPG_URL;
   const key = process.env.WOOCOMMERCE_TOPG_KEY;
   const secret = process.env.WOOCOMMERCE_TOPG_SECRET;
-  
+
   if (!url || !key || !secret) {
-    console.log('TopG WooCommerce not configured');
     return null;
   }
-  
-  return new WooCommerceService({ url, key, secret });
+
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
 }
 
 export function getDngWoo(): WooCommerceService | null {
   const url = process.env.WOOCOMMERCE_DNG_URL;
   const key = process.env.WOOCOMMERCE_DNG_KEY;
   const secret = process.env.WOOCOMMERCE_DNG_SECRET;
-  
+
   if (!url || !key || !secret) {
-    console.log('DNG WooCommerce not configured');
     return null;
   }
-  
-  return new WooCommerceService({ url, key, secret });
+
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
 }

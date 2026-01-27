@@ -2,7 +2,12 @@
 
 import { getFirebloodWoo } from '../services/woocommerce';
 
-type Period = 'today' | 'week' | 'month' | 'year';
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 const mockData = {
   channelRevenue: [
@@ -54,7 +59,7 @@ const mockData = {
   ],
 };
 
-export async function getFirebloodData(period: Period = 'month') {
+export async function getFirebloodData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getFirebloodWoo();
   
   if (!woo) {
@@ -64,7 +69,7 @@ export async function getFirebloodData(period: Period = 'month') {
   
   try {
     const [periodStats, subscriptionStats] = await Promise.all([
-      woo.getOrderStats(period),
+      woo.getOrderStats(period, dateRange),
       woo.getSubscriptionStats(),
     ]);
     
@@ -99,6 +104,7 @@ export async function getFirebloodData(period: Period = 'month') {
       acquirerScorecard: mockData.acquirerScorecard,
       dataSource: 'live',
       period,
+      dateRange,
       liveMetrics: {
         dtcRevenue: dtcRevenue,
         dtcOrders: dtcOrders,

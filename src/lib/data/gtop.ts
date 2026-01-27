@@ -2,7 +2,12 @@
 
 import { getTopgWoo } from '../services/woocommerce';
 
-type Period = 'today' | 'week' | 'month' | 'year';
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 interface Metric {
   label: string;
@@ -52,9 +57,10 @@ const periodLabels: Record<Period, string> = {
   week: 'This Week',
   month: 'This Month',
   year: 'This Year',
+  custom: 'Custom Range',
 };
 
-export async function getGtopData(period: Period = 'month') {
+export async function getGtopData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getTopgWoo();
   
   if (!woo) {
@@ -63,10 +69,14 @@ export async function getGtopData(period: Period = 'month') {
   }
   
   try {
-    const periodStats = await woo.getOrderStats(period);
+    const periodStats = await woo.getOrderStats(period, dateRange);
+    
+    const periodLabel = period === 'custom' && dateRange 
+      ? `${dateRange.start} - ${dateRange.end}`
+      : periodLabels[period];
     
     const realMetrics: Metric[] = [
-      { label: `Revenue (${periodLabels[period]})`, value: `£${periodStats.revenue.toLocaleString()}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
+      { label: `Revenue (${periodLabel})`, value: `£${periodStats.revenue.toLocaleString()}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
       { label: 'Orders', value: periodStats.orders.toLocaleString(), change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
       { label: 'AOV', value: `£${periodStats.avgOrderValue.toFixed(2)}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
       ...mockData.metrics.slice(3).map(m => ({ ...m, isLive: false })),
@@ -79,6 +89,7 @@ export async function getGtopData(period: Period = 'month') {
       topProducts: mockData.topProducts,
       dataSource: 'live',
       period,
+      dateRange,
       liveMetrics: {
         revenue: periodStats.revenue,
         orders: periodStats.orders,

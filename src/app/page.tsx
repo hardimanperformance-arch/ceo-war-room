@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import CEOWarRoom from '@/components/CEOWarRoom';
+import CEOWarRoom from '../components/CEOWarRoom';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
