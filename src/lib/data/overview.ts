@@ -1,6 +1,7 @@
-// Overview data - aggregates from all brands with live WooCommerce data
+// Overview data - aggregates from all brands with live WooCommerce + GA4 data
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
+import { getGA4Service } from '../services/ga4';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -45,17 +46,22 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const firebloodWoo = getFirebloodWoo();
   const topgWoo = getTopgWoo();
   const dngWoo = getDngWoo();
+  const ga4 = getGA4Service();
   
-  if (!firebloodWoo && !topgWoo && !dngWoo) {
+  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || ga4;
+  
+  if (!hasAnyApi) {
     console.log('Using mock overview data - no APIs configured');
     return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    const [firebloodStats, topgStats, dngStats] = await Promise.all([
+    const [firebloodStats, topgStats, dngStats, ga4Stats, ga4Channels] = await Promise.all([
       firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
       topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
       dngWoo ? dngWoo.getOrderStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficStats(period, dateRange) : null,
+      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -71,6 +77,11 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const periodLabel = period === 'custom' && dateRange 
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
+    
+    // Calculate conversion rate if we have GA4 data
+    const conversionRate = ga4Stats && ga4Stats.sessions > 0 
+      ? ((totalOrders / ga4Stats.sessions) * 100).toFixed(2)
+      : null;
     
     const realMetrics = [
       { 
@@ -109,14 +120,21 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!dngStats 
       },
       { 
-        label: 'Total Orders', 
-        value: totalOrders.toLocaleString(), 
-        change: 'LIVE', 
+        label: 'Sessions', 
+        value: ga4Stats ? ga4Stats.sessions.toLocaleString() : 'N/A', 
+        change: ga4Stats ? 'LIVE' : 'GA4 not connected', 
         changeType: 'positive', 
-        status: 'good',
-        isLive: true 
+        status: ga4Stats ? 'good' : 'warning',
+        isLive: !!ga4Stats 
       },
-      mockData.metrics[5],
+      { 
+        label: 'Conversion Rate', 
+        value: conversionRate ? `${conversionRate}%` : 'N/A', 
+        change: conversionRate ? 'LIVE' : 'Need GA4', 
+        changeType: 'positive', 
+        status: conversionRate ? 'good' : 'warning',
+        isLive: !!conversionRate 
+      },
     ];
     
     const realBrandBreakdown = [
@@ -129,6 +147,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       metrics: realMetrics,
       revenueTrend: mockData.revenueTrend,
       brandBreakdown: realBrandBreakdown,
+      channelData: ga4Channels,
       dataSource: 'live',
       period,
       dateRange,
@@ -136,6 +155,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         fireblood: firebloodStats,
         topg: topgStats,
         dng: dngStats,
+        ga4: ga4Stats,
         total: { revenue: totalRev, orders: totalOrders },
       },
     };
