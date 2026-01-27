@@ -187,6 +187,84 @@ export default function CEOWarRoom() {
             </ResponsiveContainer>
           </div>
         </div>
+
+        {/* Traffic Overview Panel - GA4 Data */}
+        {data.trafficOverview && (
+          <div className="rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-black text-white">Traffic Overview (GA4)</h2>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-black">LIVE</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-zinc-700">
+                    <th className="text-left py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Brand</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Sessions</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Users</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">New Users</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Page Views</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Bounce Rate</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Avg Duration</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Orders</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Conv Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.trafficOverview.map((row: any, i: number) => (
+                    <tr key={i} className="border-b border-zinc-800">
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: row.color }}></div>
+                          <span className="font-bold text-white">{row.brand}</span>
+                          {row.isLive && <span className="text-xs text-emerald-400">●</span>}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-right text-white font-bold">{row.sessions.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.users.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.newUsers.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.pageViews.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.bounceRate.toFixed(1)}%</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{Math.round(row.avgDuration)}s</td>
+                      <td className="py-4 px-4 text-right text-white font-bold">{row.orders.toLocaleString()}</td>
+                      <td className={`py-4 px-4 text-right font-bold ${row.convRate >= 2 ? 'text-emerald-400' : row.convRate >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {row.convRate.toFixed(2)}%
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Totals Row */}
+                  <tr className="border-t-2 border-zinc-600 bg-zinc-800">
+                    <td className="py-4 px-4 font-black text-white">TOTAL</td>
+                    <td className="py-4 px-4 text-right text-white font-black">
+                      {data.trafficOverview.reduce((sum: number, r: any) => sum + r.sessions, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right text-zinc-300 font-bold">
+                      {data.trafficOverview.reduce((sum: number, r: any) => sum + r.users, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right text-zinc-300 font-bold">
+                      {data.trafficOverview.reduce((sum: number, r: any) => sum + r.newUsers, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right text-zinc-300 font-bold">
+                      {data.trafficOverview.reduce((sum: number, r: any) => sum + r.pageViews, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right text-zinc-300">-</td>
+                    <td className="py-4 px-4 text-right text-zinc-300">-</td>
+                    <td className="py-4 px-4 text-right text-white font-black">
+                      {data.trafficOverview.reduce((sum: number, r: any) => sum + r.orders, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right text-emerald-400 font-black">
+                      {(() => {
+                        const totalSessions = data.trafficOverview.reduce((sum: number, r: any) => sum + r.sessions, 0);
+                        const totalOrders = data.trafficOverview.reduce((sum: number, r: any) => sum + r.orders, 0);
+                        return totalSessions > 0 ? ((totalOrders / totalSessions) * 100).toFixed(2) : '0.00';
+                      })()}%
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

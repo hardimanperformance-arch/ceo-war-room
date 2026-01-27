@@ -65,9 +65,9 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
       topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
       dngWoo ? dngWoo.getOrderStats(period, dateRange) : null,
-      firebloodGA4 ? firebloodGA4.getTrafficStats(period, dateRange) : null,
-      topgGA4 ? topgGA4.getTrafficStats(period, dateRange) : null,
-      dngGA4 ? dngGA4.getTrafficStats(period, dateRange) : null,
+      firebloodGA4 ? firebloodGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
+      topgGA4 ? topgGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
+      dngGA4 ? dngGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -80,8 +80,11 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const dngOrders = dngStats?.orders || 0;
     const totalOrders = fbOrders + topgOrders + dngOrders;
     
-    // Aggregate sessions from all GA4 properties
-    const totalSessions = (fbGA4?.sessions || 0) + (topgGA4Stats?.sessions || 0) + (dngGA4Stats?.sessions || 0);
+    // GA4 traffic data
+    const fbSessions = fbGA4?.sessions || 0;
+    const topgSessions = topgGA4Stats?.sessions || 0;
+    const dngSessions = dngGA4Stats?.sessions || 0;
+    const totalSessions = fbSessions + topgSessions + dngSessions;
     const hasGA4 = fbGA4 || topgGA4Stats || dngGA4Stats;
     
     const periodLabel = period === 'custom' && dateRange 
@@ -96,7 +99,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const realMetrics = [
       { 
         label: `Total Revenue (${periodLabel})`, 
-        value: `£${totalRev.toLocaleString()}`, 
+        value: `£${Math.round(totalRev).toLocaleString()}`, 
         change: 'LIVE', 
         changeType: 'positive', 
         status: 'good',
@@ -104,7 +107,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       },
       { 
         label: 'Fireblood Revenue', 
-        value: firebloodStats ? `£${fbRev.toLocaleString()}` : 'N/A', 
+        value: firebloodStats ? `£${Math.round(fbRev).toLocaleString()}` : 'N/A', 
         change: firebloodStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: firebloodStats ? 'good' : 'warning', 
@@ -113,7 +116,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       },
       { 
         label: 'Gtop Revenue', 
-        value: topgStats ? `£${topgRev.toLocaleString()}` : 'N/A', 
+        value: topgStats ? `£${Math.round(topgRev).toLocaleString()}` : 'N/A', 
         change: topgStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: topgStats ? 'good' : 'warning', 
@@ -122,7 +125,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       },
       { 
         label: 'DNG Revenue', 
-        value: dngStats ? `£${dngRev.toLocaleString()}` : 'N/A', 
+        value: dngStats ? `£${Math.round(dngRev).toLocaleString()}` : 'N/A', 
         change: dngStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: dngStats ? 'good' : 'warning', 
@@ -148,15 +151,67 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     ];
     
     const realBrandBreakdown = [
-      { name: 'Fireblood', value: fbRev, color: '#FF4757', isLive: !!firebloodStats },
-      { name: 'Gtop', value: topgRev, color: '#00E676', isLive: !!topgStats },
-      { name: 'DNG', value: dngRev, color: '#AA80FF', isLive: !!dngStats },
+      { name: 'Fireblood', value: Math.round(fbRev), color: '#FF4757', isLive: !!firebloodStats },
+      { name: 'Gtop', value: Math.round(topgRev), color: '#00E676', isLive: !!topgStats },
+      { name: 'DNG', value: Math.round(dngRev), color: '#AA80FF', isLive: !!dngStats },
+    ];
+    
+    // Traffic Overview by Brand (GA4 data)
+    const trafficOverview = [
+      { 
+        brand: 'Fireblood', 
+        color: '#FF4757',
+        sessions: fbSessions,
+        users: fbGA4?.totalUsers || 0,
+        newUsers: fbGA4?.newUsers || 0,
+        bounceRate: fbGA4?.bounceRate || 0,
+        avgDuration: fbGA4?.avgSessionDuration || 0,
+        pageViews: fbGA4?.pageViews || 0,
+        orders: fbOrders,
+        convRate: fbSessions > 0 ? ((fbOrders / fbSessions) * 100) : 0,
+        isLive: !!fbGA4,
+      },
+      { 
+        brand: 'Top G', 
+        color: '#00E676',
+        sessions: topgSessions,
+        users: topgGA4Stats?.totalUsers || 0,
+        newUsers: topgGA4Stats?.newUsers || 0,
+        bounceRate: topgGA4Stats?.bounceRate || 0,
+        avgDuration: topgGA4Stats?.avgSessionDuration || 0,
+        pageViews: topgGA4Stats?.pageViews || 0,
+        orders: topgOrders,
+        convRate: topgSessions > 0 ? ((topgOrders / topgSessions) * 100) : 0,
+        isLive: !!topgGA4Stats,
+      },
+      { 
+        brand: 'DNG', 
+        color: '#AA80FF',
+        sessions: dngSessions,
+        users: dngGA4Stats?.totalUsers || 0,
+        newUsers: dngGA4Stats?.newUsers || 0,
+        bounceRate: dngGA4Stats?.bounceRate || 0,
+        avgDuration: dngGA4Stats?.avgSessionDuration || 0,
+        pageViews: dngGA4Stats?.pageViews || 0,
+        orders: dngOrders,
+        convRate: dngSessions > 0 ? ((dngOrders / dngSessions) * 100) : 0,
+        isLive: !!dngGA4Stats,
+      },
+    ];
+    
+    // Traffic breakdown for pie chart
+    const trafficBreakdown = [
+      { name: 'Fireblood', value: fbSessions, color: '#FF4757' },
+      { name: 'Top G', value: topgSessions, color: '#00E676' },
+      { name: 'DNG', value: dngSessions, color: '#AA80FF' },
     ];
     
     return {
       metrics: realMetrics,
       revenueTrend: mockData.revenueTrend,
       brandBreakdown: realBrandBreakdown,
+      trafficOverview,
+      trafficBreakdown,
       dataSource: 'live',
       period,
       dateRange,
