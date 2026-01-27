@@ -78,11 +78,10 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
   }
   
   try {
-    const [periodStats, subscriptionStats, ga4Stats, ga4Channels] = await Promise.all([
+    const [periodStats, subscriptionStats, ga4Stats] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       woo ? woo.getSubscriptionStats() : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
-      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
     
     const dtcRevenue = periodStats ? Math.round(periodStats.revenue) : 0;
@@ -110,18 +109,8 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
       ...mockData.channelRevenue.slice(1).map(c => ({ ...c, isLive: false })),
     ];
     
-    // Merge GA4 channel data with mock economics
-    const realChannelEconomics = ga4Channels && ga4Channels.length > 0
-      ? ga4Channels.map((ch: any) => ({
-          channel: ch.channel,
-          sessions: ch.sessions,
-          users: ch.users,
-          conversions: ch.conversions,
-          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(2) : 0,
-          status: ch.conversions > 50 ? 'scale' : ch.conversions > 10 ? 'watch' : 'fix',
-          isLive: true,
-        }))
-      : mockData.channelEconomics;
+    // Keep mock channel economics - GA4 doesn't have spend/revenue data
+    const realChannelEconomics = mockData.channelEconomics;
     
     const realSubscriptionMetrics = subscriptionStats ? {
       ...mockData.subscriptionMetrics,
@@ -145,7 +134,7 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
         dtcOrders,
         avgOrderValue: periodStats ? Math.round(periodStats.avgOrderValue) : 0,
         subscriptions: subscriptionStats,
-        sessions: ga4Stats?.sessions,
+        sessions: ga4Stats?.sessions || 0,
         conversionRate: convRate,
       },
     };

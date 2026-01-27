@@ -72,11 +72,10 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
   }
   
   try {
-    const [wooStats, sendlaneStats, ga4Stats, ga4Channels] = await Promise.all([
+    const [wooStats, sendlaneStats, ga4Stats] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       sendlane ? sendlane.getTotalSubscribers() : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
-      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
     
     const periodLabel = period === 'custom' && dateRange 
@@ -89,7 +88,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
     const realMetrics: Metric[] = [
       { 
         label: `Revenue (${periodLabel})`, 
-        value: wooStats ? `£${revenue.toLocaleString()}` : 'N/A', 
+        value: wooStats ? `£${Math.round(revenue).toLocaleString()}` : 'N/A', 
         change: wooStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: 'good',
@@ -113,7 +112,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
       },
       { 
         label: 'Page Views', 
-        value: ga4Stats ? ga4Stats.pageViews.toLocaleString() : 'N/A', 
+        value: ga4Stats ? (ga4Stats.pageViews || 0).toLocaleString() : 'N/A', 
         change: ga4Stats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: 'good',
@@ -121,7 +120,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
       },
       { 
         label: 'Bounce Rate', 
-        value: ga4Stats ? `${ga4Stats.bounceRate.toFixed(1)}%` : 'N/A', 
+        value: ga4Stats ? `${(ga4Stats.bounceRate || 0).toFixed(1)}%` : 'N/A', 
         change: ga4Stats ? 'LIVE' : 'Not connected', 
         changeType: 'neutral', 
         status: ga4Stats && ga4Stats.bounceRate < 50 ? 'good' : 'warning',
@@ -129,7 +128,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
       },
       { 
         label: 'Avg Session', 
-        value: ga4Stats ? `${Math.round(ga4Stats.avgSessionDuration)}s` : 'N/A', 
+        value: ga4Stats ? `${Math.round(ga4Stats.avgSessionDuration || 0)}s` : 'N/A', 
         change: ga4Stats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
         status: 'good',
@@ -137,32 +136,21 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
       },
     ];
     
-    // Use real GA4 channel data for traffic sources if available
-    const realTrafficSources = ga4Channels && ga4Channels.length > 0
-      ? ga4Channels.map((ch: any) => ({
-          channel: ch.channel,
-          sessions: ch.sessions,
-          signups: ch.conversions,
-          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(1) : 0,
-          isLive: true,
-        }))
-      : mockData.trafficSources;
-    
     return {
       metrics: realMetrics,
       launches: mockData.launches,
       listGrowth: mockData.listGrowth,
-      trafficSources: realTrafficSources,
+      trafficSources: mockData.trafficSources,
       ga4Stats,
       dataSource: wooStats || sendlaneStats || ga4Stats ? 'live' : 'mock',
       period,
       dateRange,
       liveMetrics: {
         revenue,
-        orders: wooStats?.orders,
-        totalSubscribers: sendlaneStats?.totalSubscribers,
+        orders: wooStats?.orders || 0,
+        totalSubscribers: sendlaneStats?.totalSubscribers || 0,
         sessions,
-        pageViews: ga4Stats?.pageViews,
+        pageViews: ga4Stats?.pageViews || 0,
       },
     };
   } catch (error) {

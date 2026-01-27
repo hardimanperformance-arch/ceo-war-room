@@ -37,12 +37,12 @@ const mockData = {
     { label: 'Returning Customers', value: '34%', change: '+2%', changeType: 'positive', status: 'good' },
   ] as Metric[],
   channelEconomics: [
-    { channel: 'Direct', sessions: 28400, revenue: 38200, orders: 712, convRate: 2.51, cac: 0, status: 'scale' },
-    { channel: 'Instagram', sessions: 24800, revenue: 28600, orders: 548, convRate: 2.21, cac: 0, status: 'scale' },
-    { channel: 'TikTok', sessions: 18200, revenue: 16400, orders: 298, convRate: 1.64, cac: 0, status: 'watch' },
-    { channel: 'Twitter/X', sessions: 8400, revenue: 8200, orders: 156, convRate: 1.86, cac: 0, status: 'good' },
-    { channel: 'Google Organic', sessions: 5200, revenue: 4800, orders: 89, convRate: 1.71, cac: 0, status: 'good' },
-    { channel: 'YouTube', sessions: 2952, revenue: 2220, orders: 44, convRate: 1.49, cac: 0, status: 'watch' },
+    { channel: 'Direct', spend: 0, revenue: 38200, orders: 712, convRate: 2.51, cac: 0, roas: '∞', ltv: 120, ltvCac: '∞', status: 'scale' },
+    { channel: 'Instagram', spend: 0, revenue: 28600, orders: 548, convRate: 2.21, cac: 0, roas: '∞', ltv: 115, ltvCac: '∞', status: 'scale' },
+    { channel: 'TikTok', spend: 0, revenue: 16400, orders: 298, convRate: 1.64, cac: 0, roas: '∞', ltv: 108, ltvCac: '∞', status: 'watch' },
+    { channel: 'Twitter/X', spend: 0, revenue: 8200, orders: 156, convRate: 1.86, cac: 0, roas: '∞', ltv: 95, ltvCac: '∞', status: 'good' },
+    { channel: 'Google Organic', spend: 0, revenue: 4800, orders: 89, convRate: 1.71, cac: 0, roas: '∞', ltv: 102, ltvCac: '∞', status: 'good' },
+    { channel: 'YouTube', spend: 0, revenue: 2220, orders: 44, convRate: 1.49, cac: 0, roas: '∞', ltv: 88, ltvCac: '∞', status: 'watch' },
   ],
   trafficTrend: [
     { month: 'Jul', sessions: 102000, orders: 2100, revenue: 112800 },
@@ -71,10 +71,9 @@ export async function getGtopData(period: Period = 'month', dateRange?: DateRang
   }
   
   try {
-    const [periodStats, ga4Stats, ga4Channels] = await Promise.all([
+    const [periodStats, ga4Stats] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
-      ga4 ? ga4.getTrafficByChannel(period, dateRange) : null,
     ]);
     
     const periodLabel = period === 'custom' && dateRange 
@@ -87,7 +86,7 @@ export async function getGtopData(period: Period = 'month', dateRange?: DateRang
     const convRate = sessions > 0 ? ((orders / sessions) * 100).toFixed(2) : '0';
     
     const realMetrics: Metric[] = [
-      { label: `Revenue (${periodLabel})`, value: `£${revenue.toLocaleString()}`, change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
+      { label: `Revenue (${periodLabel})`, value: `£${Math.round(revenue).toLocaleString()}`, change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
       { label: 'Orders', value: orders.toLocaleString(), change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
       { label: 'AOV', value: periodStats ? `£${periodStats.avgOrderValue.toFixed(2)}` : 'N/A', change: periodStats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!periodStats },
       { label: 'Conversion Rate', value: `${convRate}%`, change: ga4Stats ? 'LIVE' : 'N/A', changeType: 'positive', status: 'good', isLive: !!ga4Stats },
@@ -95,22 +94,9 @@ export async function getGtopData(period: Period = 'month', dateRange?: DateRang
       { label: 'Bounce Rate', value: ga4Stats ? `${ga4Stats.bounceRate.toFixed(1)}%` : 'N/A', change: ga4Stats ? 'LIVE' : 'N/A', changeType: 'neutral', status: 'good', isLive: !!ga4Stats },
     ];
     
-    // Use real GA4 channel data if available
-    const realChannelEconomics = ga4Channels && ga4Channels.length > 0
-      ? ga4Channels.map((ch: any) => ({
-          channel: ch.channel,
-          sessions: ch.sessions,
-          users: ch.users,
-          conversions: ch.conversions,
-          convRate: ch.sessions > 0 ? ((ch.conversions / ch.sessions) * 100).toFixed(2) : 0,
-          status: ch.sessions > 5000 ? 'scale' : ch.sessions > 1000 ? 'watch' : 'fix',
-          isLive: true,
-        }))
-      : mockData.channelEconomics;
-    
     return {
       metrics: realMetrics,
-      channelEconomics: realChannelEconomics,
+      channelEconomics: mockData.channelEconomics,
       trafficTrend: mockData.trafficTrend,
       topProducts: mockData.topProducts,
       ga4Stats,
