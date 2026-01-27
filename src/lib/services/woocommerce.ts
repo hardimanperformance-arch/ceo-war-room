@@ -56,7 +56,7 @@ export class WooCommerceService {
         'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/json',
       },
-      next: { revalidate: 300 }, // Cache for 5 minutes
+      next: { revalidate: 300 },
     });
     
     if (!response.ok) {
@@ -155,12 +155,13 @@ export function getFirebloodWoo(): WooCommerceService | null {
   return new WooCommerceService({ url, key, secret });
 }
 
-export function getGtopWoo(): WooCommerceService | null {
-  const url = process.env.WOOCOMMERCE_GTOP_URL;
-  const key = process.env.WOOCOMMERCE_GTOP_KEY;
-  const secret = process.env.WOOCOMMERCE_GTOP_SECRET;
+export function getTopgWoo(): WooCommerceService | null {
+  const url = process.env.WOOCOMMERCE_TOPG_URL;
+  const key = process.env.WOOCOMMERCE_TOPG_KEY;
+  const secret = process.env.WOOCOMMERCE_TOPG_SECRET;
   
   if (!url || !key || !secret) {
+    console.log('TopG WooCommerce not configured');
     return null;
   }
   
@@ -173,6 +174,7 @@ export function getDngWoo(): WooCommerceService | null {
   const secret = process.env.WOOCOMMERCE_DNG_SECRET;
   
   if (!url || !key || !secret) {
+    console.log('DNG WooCommerce not configured');
     return null;
   }
   
