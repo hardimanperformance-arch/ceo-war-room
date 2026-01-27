@@ -3,6 +3,15 @@
 import { getDngWoo } from '../services/woocommerce';
 import { getSendlane } from '../services/sendlane';
 
+interface Metric {
+  label: string;
+  value: string;
+  change: string;
+  changeType: string;
+  status: string;
+  isLive?: boolean;
+}
+
 const mockData = {
   metrics: [
     { label: 'YTD Revenue', value: '£36,656', change: '-12.4%', changeType: 'negative', status: 'warning' },
@@ -11,7 +20,7 @@ const mockData = {
     { label: 'Avg Open Rate', value: '42.3%', change: '+2.1%', changeType: 'positive', status: 'good' },
     { label: 'Last Launch Revenue', value: '£18,240', change: '', changeType: 'neutral', status: 'good' },
     { label: 'Avg Launch Revenue', value: '£12,218', change: '+18%', changeType: 'positive', status: 'good' },
-  ],
+  ] as Metric[],
   launches: [
     { name: 'Issue #7: Reckoning', date: 'Feb 2025', status: 'upcoming', preorders: 847, target: 1200 },
     { name: 'Issue #6: Shadows', date: 'Oct 2024', revenue: 18240, sellThrough: 92, status: 'completed' },
@@ -51,7 +60,7 @@ export async function getDngData() {
       sendlane ? sendlane.getTotalSubscribers() : null,
     ]);
     
-    const realMetrics = [...mockData.metrics];
+    const realMetrics: Metric[] = [...mockData.metrics];
     
     if (wooStats) {
       realMetrics[0] = { 
