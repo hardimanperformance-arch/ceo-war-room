@@ -2,6 +2,8 @@
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 
+type Period = 'today' | 'week' | 'month' | 'year';
+
 const mockData = {
   metrics: [
     { label: 'Total Revenue (All Brands)', value: '£847,230', change: '+6.8%', changeType: 'positive', status: 'good' },
@@ -26,21 +28,28 @@ const mockData = {
   ],
 };
 
-export async function getOverviewData() {
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+};
+
+export async function getOverviewData(period: Period = 'month') {
   const firebloodWoo = getFirebloodWoo();
   const topgWoo = getTopgWoo();
   const dngWoo = getDngWoo();
   
   if (!firebloodWoo && !topgWoo && !dngWoo) {
     console.log('Using mock overview data - no APIs configured');
-    return { ...mockData, dataSource: 'mock' };
+    return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
     const [firebloodStats, topgStats, dngStats] = await Promise.all([
-      firebloodWoo ? firebloodWoo.getOrderStats('month') : null,
-      topgWoo ? topgWoo.getOrderStats('month') : null,
-      dngWoo ? dngWoo.getOrderStats('month') : null,
+      firebloodWoo ? firebloodWoo.getOrderStats(period) : null,
+      topgWoo ? topgWoo.getOrderStats(period) : null,
+      dngWoo ? dngWoo.getOrderStats(period) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -55,7 +64,7 @@ export async function getOverviewData() {
     
     const realMetrics = [
       { 
-        label: 'Total Revenue (All Brands)', 
+        label: `Total Revenue (${periodLabels[period]})`, 
         value: `£${totalRev.toLocaleString()}`, 
         change: 'LIVE', 
         changeType: 'positive', 
@@ -97,7 +106,7 @@ export async function getOverviewData() {
         status: 'good',
         isLive: true 
       },
-      mockData.metrics[5], // Blended CAC - needs GA4
+      mockData.metrics[5],
     ];
     
     const realBrandBreakdown = [
@@ -108,9 +117,10 @@ export async function getOverviewData() {
     
     return {
       metrics: realMetrics,
-      revenueTrend: mockData.revenueTrend, // Need historical data
+      revenueTrend: mockData.revenueTrend,
       brandBreakdown: realBrandBreakdown,
       dataSource: 'live',
+      period,
       liveMetrics: {
         fireblood: firebloodStats,
         topg: topgStats,
@@ -120,6 +130,6 @@ export async function getOverviewData() {
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
-    return { ...mockData, dataSource: 'mock', error: String(error) };
+    return { ...mockData, dataSource: 'mock', error: String(error), period };
   }
 }

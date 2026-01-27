@@ -3,6 +3,8 @@
 import { getDngWoo } from '../services/woocommerce';
 import { getSendlane } from '../services/sendlane';
 
+type Period = 'today' | 'week' | 'month' | 'year';
+
 interface Metric {
   label: string;
   value: string;
@@ -45,18 +47,25 @@ const mockData = {
   ],
 };
 
-export async function getDngData() {
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+};
+
+export async function getDngData(period: Period = 'month') {
   const woo = getDngWoo();
   const sendlane = getSendlane();
   
   if (!woo && !sendlane) {
     console.log('Using mock DNG data - APIs not configured');
-    return { ...mockData, dataSource: 'mock' };
+    return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
     const [wooStats, sendlaneStats] = await Promise.all([
-      woo ? woo.getOrderStats('year') : null,
+      woo ? woo.getOrderStats(period) : null,
       sendlane ? sendlane.getTotalSubscribers() : null,
     ]);
     
@@ -64,7 +73,7 @@ export async function getDngData() {
     
     if (wooStats) {
       realMetrics[0] = { 
-        label: 'YTD Revenue', 
+        label: `Revenue (${periodLabels[period]})`, 
         value: `£${wooStats.revenue.toLocaleString()}`, 
         change: 'LIVE', 
         changeType: 'positive', 
@@ -90,14 +99,16 @@ export async function getDngData() {
       listGrowth: mockData.listGrowth,
       trafficSources: mockData.trafficSources,
       dataSource: wooStats || sendlaneStats ? 'live' : 'mock',
+      period,
       liveMetrics: {
-        ytdRevenue: wooStats?.revenue,
+        revenue: wooStats?.revenue,
+        orders: wooStats?.orders,
         totalSubscribers: sendlaneStats?.totalSubscribers,
         lists: sendlaneStats?.lists,
       },
     };
   } catch (error) {
     console.error('Error fetching DNG data:', error);
-    return { ...mockData, dataSource: 'mock', error: String(error) };
+    return { ...mockData, dataSource: 'mock', error: String(error), period };
   }
 }

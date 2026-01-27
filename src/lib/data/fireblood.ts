@@ -2,7 +2,8 @@
 
 import { getFirebloodWoo } from '../services/woocommerce';
 
-// Mock data fallback
+type Period = 'today' | 'week' | 'month' | 'year';
+
 const mockData = {
   channelRevenue: [
     { channel: 'DTC Website', revenue: 498506, orders: 5540, pct: 70, margin: 68, growth: '+12%' },
@@ -53,43 +54,36 @@ const mockData = {
   ],
 };
 
-export async function getFirebloodData() {
+export async function getFirebloodData(period: Period = 'month') {
   const woo = getFirebloodWoo();
   
   if (!woo) {
     console.log('Using mock Fireblood data - WooCommerce not configured');
-    return { ...mockData, dataSource: 'mock' };
+    return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    // Fetch real data from WooCommerce
-    const [monthStats, subscriptionStats] = await Promise.all([
-      woo.getOrderStats('month'),
+    const [periodStats, subscriptionStats] = await Promise.all([
+      woo.getOrderStats(period),
       woo.getSubscriptionStats(),
     ]);
     
-    // Build real DTC Website data
-    const dtcRevenue = Math.round(monthStats.revenue);
-    const dtcOrders = monthStats.orders;
-    
-    // Calculate percentages (DTC only for now, other channels need their APIs)
-    const totalRevenue = dtcRevenue; // Will add other channels later
+    const dtcRevenue = Math.round(periodStats.revenue);
+    const dtcOrders = periodStats.orders;
     
     const realChannelRevenue = [
       { 
         channel: 'DTC Website', 
         revenue: dtcRevenue, 
         orders: dtcOrders, 
-        pct: 100, // Until we add other channels
+        pct: 100,
         margin: 68, 
         growth: 'LIVE',
         isLive: true 
       },
-      // Other channels still mock until APIs connected
       ...mockData.channelRevenue.slice(1).map(c => ({ ...c, isLive: false })),
     ];
     
-    // Real subscription data if available
     const realSubscriptionMetrics = subscriptionStats ? {
       ...mockData.subscriptionMetrics,
       activeSubscribers: subscriptionStats.activeSubscribers,
@@ -99,20 +93,21 @@ export async function getFirebloodData() {
     
     return {
       channelRevenue: realChannelRevenue,
-      channelEconomics: mockData.channelEconomics, // Need GA4 for this
+      channelEconomics: mockData.channelEconomics,
       subscriptionMetrics: realSubscriptionMetrics,
-      subscriptionTrends: mockData.subscriptionTrends, // Need historical data
-      acquirerScorecard: mockData.acquirerScorecard, // Calculated from above
+      subscriptionTrends: mockData.subscriptionTrends,
+      acquirerScorecard: mockData.acquirerScorecard,
       dataSource: 'live',
+      period,
       liveMetrics: {
         dtcRevenue: dtcRevenue,
         dtcOrders: dtcOrders,
-        avgOrderValue: Math.round(monthStats.avgOrderValue),
+        avgOrderValue: Math.round(periodStats.avgOrderValue),
         subscriptions: subscriptionStats,
       },
     };
   } catch (error) {
     console.error('Error fetching Fireblood data:', error);
-    return { ...mockData, dataSource: 'mock', error: String(error) };
+    return { ...mockData, dataSource: 'mock', error: String(error), period };
   }
 }

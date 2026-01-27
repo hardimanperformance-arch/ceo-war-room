@@ -39,9 +39,12 @@ interface ChannelEconomics {
   status: string;
 }
 
+type TimePeriod = 'today' | 'week' | 'month' | 'year';
+
 export default function CEOWarRoom() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('overview');
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('month');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,15 +54,15 @@ export default function CEOWarRoom() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch data when tab changes
+  // Fetch data when tab or time period changes
   useEffect(() => {
-    fetchData(activeTab);
-  }, [activeTab]);
+    fetchData(activeTab, timePeriod);
+  }, [activeTab, timePeriod]);
 
-  const fetchData = async (tab: string) => {
+  const fetchData = async (tab: string, period: TimePeriod) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?tab=${tab}`);
+      const res = await fetch(`/api/dashboard?tab=${tab}&period=${period}`);
       const json = await res.json();
       setData(json);
     } catch (error) {
@@ -81,6 +84,13 @@ export default function CEOWarRoom() {
     { id: 'dng', label: 'DNG', icon: '📚' },
   ];
 
+  const timePeriods: { id: TimePeriod; label: string }[] = [
+    { id: 'today', label: 'Today' },
+    { id: 'week', label: 'This Week' },
+    { id: 'month', label: 'This Month' },
+    { id: 'year', label: 'This Year' },
+  ];
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'good': case 'scale': return 'bg-emerald-500';
@@ -98,7 +108,6 @@ export default function CEOWarRoom() {
       default: return 'bg-zinc-800 border-zinc-600';
     }
   };
-
 
   // Render metric card
   const renderMetricCard = (metric: Metric, index: number) => (
@@ -173,7 +182,6 @@ export default function CEOWarRoom() {
       </div>
     );
   };
-
 
   // Render Fireblood Tab
   const renderFireblood = () => {
@@ -277,7 +285,6 @@ export default function CEOWarRoom() {
               </div>
             )}
           </div>
-
 
           {/* Subscription Chart */}
           <div className="col-span-8 rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
@@ -402,7 +409,6 @@ export default function CEOWarRoom() {
     );
   };
 
-
   // Render DNG Tab
   const renderDng = () => {
     if (!data) return null;
@@ -495,7 +501,6 @@ export default function CEOWarRoom() {
     );
   };
 
-
   // Main render
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -524,24 +529,44 @@ export default function CEOWarRoom() {
         </div>
       </header>
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation + Time Period Selector */}
       <nav className="border-b-2 border-zinc-800 bg-zinc-900/50">
         <div className="max-w-[1800px] mx-auto px-6">
-          <div className="flex gap-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-4 font-bold text-sm transition-all border-b-4 ${
-                  activeTab === tab.id
-                    ? 'text-white border-red-500 bg-zinc-800/50'
-                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-800/30'
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            {/* Tabs */}
+            <div className="flex gap-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-4 font-bold text-sm transition-all border-b-4 ${
+                    activeTab === tab.id
+                      ? 'text-white border-red-500 bg-zinc-800/50'
+                      : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-800/30'
+                  }`}
+                >
+                  <span className="mr-2">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Time Period Selector */}
+            <div className="flex items-center gap-2 bg-zinc-800 rounded-lg p-1">
+              {timePeriods.map((period) => (
+                <button
+                  key={period.id}
+                  onClick={() => setTimePeriod(period.id)}
+                  className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${
+                    timePeriod === period.id
+                      ? 'bg-red-500 text-white'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                  }`}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </nav>

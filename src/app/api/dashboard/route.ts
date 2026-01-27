@@ -7,25 +7,26 @@ import { getDngData } from '@/lib/data/dng';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const tab = searchParams.get('tab') || 'overview';
+  const period = (searchParams.get('period') || 'month') as 'today' | 'week' | 'month' | 'year';
   
   try {
     let data;
     
     switch (tab) {
       case 'overview':
-        data = await getOverviewData();
+        data = await getOverviewData(period);
         break;
       case 'fireblood':
-        data = await getFirebloodData();
+        data = await getFirebloodData(period);
         break;
       case 'gtop':
-        data = await getGtopData();
+        data = await getGtopData(period);
         break;
       case 'dng':
-        data = await getDngData();
+        data = await getDngData(period);
         break;
       default:
-        data = await getOverviewData();
+        data = await getOverviewData(period);
     }
     
     return NextResponse.json(data);

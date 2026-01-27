@@ -2,6 +2,17 @@
 
 import { getTopgWoo } from '../services/woocommerce';
 
+type Period = 'today' | 'week' | 'month' | 'year';
+
+interface Metric {
+  label: string;
+  value: string;
+  change: string;
+  changeType: string;
+  status: string;
+  isLive?: boolean;
+}
+
 const mockData = {
   metrics: [
     { label: 'Monthly Revenue', value: '£98,420', change: '+3.1%', changeType: 'positive', status: 'warning' },
@@ -10,7 +21,7 @@ const mockData = {
     { label: 'Conversion Rate', value: '2.1%', change: '+0.3%', changeType: 'positive', status: 'good' },
     { label: 'Sessions', value: '87,952', change: '-8.2%', changeType: 'negative', status: 'warning' },
     { label: 'Returning Customers', value: '34%', change: '+2%', changeType: 'positive', status: 'good' },
-  ],
+  ] as Metric[],
   channelEconomics: [
     { channel: 'Direct', sessions: 28400, revenue: 38200, orders: 712, convRate: 2.51, cac: 0, status: 'scale' },
     { channel: 'Instagram', sessions: 24800, revenue: 28600, orders: 548, convRate: 2.21, cac: 0, status: 'scale' },
@@ -36,21 +47,28 @@ const mockData = {
   ],
 };
 
-export async function getGtopData() {
+const periodLabels: Record<Period, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+};
+
+export async function getGtopData(period: Period = 'month') {
   const woo = getTopgWoo();
   
   if (!woo) {
     console.log('Using mock Gtop data - WooCommerce not configured');
-    return { ...mockData, dataSource: 'mock' };
+    return { ...mockData, dataSource: 'mock', period };
   }
   
   try {
-    const monthStats = await woo.getOrderStats('month');
+    const periodStats = await woo.getOrderStats(period);
     
-    const realMetrics = [
-      { label: 'Monthly Revenue', value: `£${monthStats.revenue.toLocaleString()}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
-      { label: 'Orders', value: monthStats.orders.toLocaleString(), change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
-      { label: 'AOV', value: `£${monthStats.avgOrderValue.toFixed(2)}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
+    const realMetrics: Metric[] = [
+      { label: `Revenue (${periodLabels[period]})`, value: `£${periodStats.revenue.toLocaleString()}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
+      { label: 'Orders', value: periodStats.orders.toLocaleString(), change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
+      { label: 'AOV', value: `£${periodStats.avgOrderValue.toFixed(2)}`, change: 'LIVE', changeType: 'positive', status: 'good', isLive: true },
       ...mockData.metrics.slice(3).map(m => ({ ...m, isLive: false })),
     ];
     
@@ -60,14 +78,15 @@ export async function getGtopData() {
       trafficTrend: mockData.trafficTrend,
       topProducts: mockData.topProducts,
       dataSource: 'live',
+      period,
       liveMetrics: {
-        revenue: monthStats.revenue,
-        orders: monthStats.orders,
-        avgOrderValue: monthStats.avgOrderValue,
+        revenue: periodStats.revenue,
+        orders: periodStats.orders,
+        avgOrderValue: periodStats.avgOrderValue,
       },
     };
   } catch (error) {
     console.error('Error fetching Gtop data:', error);
-    return { ...mockData, dataSource: 'mock', error: String(error) };
+    return { ...mockData, dataSource: 'mock', error: String(error), period };
   }
 }
