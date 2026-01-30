@@ -1,47 +1,54 @@
 import { NextResponse } from 'next/server';
+import { getFirebloodWoo, getTopgWoo, getDngWoo } from '@/lib/services/woocommerce';
 
 export async function GET() {
-  const firebloodUrl = process.env.WOOCOMMERCE_FIREBLOOD_URL;
-  const firebloodKey = process.env.WOOCOMMERCE_FIREBLOOD_KEY;
-  const firebloodSecret = process.env.WOOCOMMERCE_FIREBLOOD_SECRET;
-  
-  // Check if env vars exist
-  const envCheck = {
-    hasUrl: !!firebloodUrl,
-    hasKey: !!firebloodKey,
-    hasSecret: !!firebloodSecret,
-    urlValue: firebloodUrl || 'NOT SET',
-    keyPrefix: firebloodKey ? firebloodKey.substring(0, 10) + '...' : 'NOT SET',
-    secretPrefix: firebloodSecret ? firebloodSecret.substring(0, 10) + '...' : 'NOT SET',
+  const results: any = {
+    fireblood: { configured: false },
+    topg: { configured: false },
+    dng: { configured: false },
   };
 
-  // Try a simple API call
-  if (firebloodUrl && firebloodKey && firebloodSecret) {
+  // Test Fireblood
+  const fbWoo = getFirebloodWoo();
+  if (fbWoo) {
+    results.fireblood.configured = true;
     try {
-      const auth = Buffer.from(`${firebloodKey}:${firebloodSecret}`).toString('base64');
-      const response = await fetch(`${firebloodUrl}/wp-json/wc/v3/orders?per_page=1`, {
-        headers: {
-          'Authorization': `Basic ${auth}`,
-        },
-      });
-      
-      return NextResponse.json({
-        envCheck,
-        apiTest: {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-        }
-      });
+      const stats = await fbWoo.getOrderStats('month');
+      results.fireblood.success = true;
+      results.fireblood.data = stats;
     } catch (error) {
-      return NextResponse.json({
-        envCheck,
-        apiTest: {
-          error: String(error),
-        }
-      });
+      results.fireblood.success = false;
+      results.fireblood.error = String(error);
     }
   }
 
-  return NextResponse.json({ envCheck, apiTest: 'Skipped - missing credentials' });
+  // Test TopG
+  const topgWoo = getTopgWoo();
+  if (topgWoo) {
+    results.topg.configured = true;
+    try {
+      const stats = await topgWoo.getOrderStats('month');
+      results.topg.success = true;
+      results.topg.data = stats;
+    } catch (error) {
+      results.topg.success = false;
+      results.topg.error = String(error);
+    }
+  }
+
+  // Test DNG
+  const dngWoo = getDngWoo();
+  if (dngWoo) {
+    results.dng.configured = true;
+    try {
+      const stats = await dngWoo.getOrderStats('month');
+      results.dng.success = true;
+      results.dng.data = stats;
+    } catch (error) {
+      results.dng.success = false;
+      results.dng.error = String(error);
+    }
+  }
+
+  return NextResponse.json(results);
 }
