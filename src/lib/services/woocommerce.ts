@@ -89,25 +89,43 @@ export class WooCommerceService {
 
   async getOrders(period: Period = 'month', customRange?: DateRange): Promise<Order[]> {
     const { after, before } = this.getDateRange(period, customRange);
-    const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
-    url.searchParams.set('after', after);
-    url.searchParams.set('before', before);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('status', 'completed,processing');
+    let allOrders: Order[] = [];
+    let page = 1;
+    let hasMore = true;
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': this.getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      next: { revalidate: 300 },
-    });
+    while (hasMore) {
+      const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
+      url.searchParams.set('after', after);
+      url.searchParams.set('before', before);
+      url.searchParams.set('per_page', '100');
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('status', 'completed,processing');
 
-    if (!response.ok) {
-      throw new Error(`WooCommerce API error: ${response.status}`);
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        next: { revalidate: 300 },
+      });
+
+      if (!response.ok) {
+        throw new Error(`WooCommerce API error: ${response.status}`);
+      }
+
+      const orders: Order[] = await response.json();
+      allOrders = allOrders.concat(orders);
+
+      // Check if there are more pages
+      const totalPages = parseInt(response.headers.get('X-WP-TotalPages') || '1');
+      hasMore = page < totalPages;
+      page++;
+
+      // Safety limit to prevent infinite loops
+      if (page > 50) break;
     }
 
-    return response.json();
+    return allOrders;
   }
 
   async getSubscriptions(): Promise<Subscription[]> {
