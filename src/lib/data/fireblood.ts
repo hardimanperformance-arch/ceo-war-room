@@ -23,11 +23,12 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
   const ga4 = getFirebloodGA4();
   
   try {
-    const [periodStats, subscriptionStats, ga4Stats, topProducts] = await Promise.all([
+    const [periodStats, subscriptionStats, ga4Stats, topProducts, churnData] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       woo ? woo.getSubscriptionStats() : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
       woo ? woo.getTopProducts(period, dateRange, 10) : null,
+      woo ? woo.getChurnData() : null,
     ]);
     
     const dtcRevenue = periodStats ? Math.round(periodStats.revenue) : 0;
@@ -96,13 +97,71 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
     const subscriptionMetrics = subscriptionStats ? {
       activeSubscribers: subscriptionStats.activeSubscribers,
       mrr: subscriptionStats.mrr,
+      churnRate: churnData?.churnRate || null,
       isLive: true,
     } : null;
+    
+    // Calculate acquirer scorecard metrics from real data
+    const totalRevenue = dtcRevenue;
+    const subscriptionRevenue = subscriptionStats?.mrr || 0;
+    const subscriptionPct = totalRevenue > 0 ? (subscriptionRevenue / totalRevenue) * 100 : 0;
+    
+    const acquirerScorecard = [
+      {
+        metric: 'Monthly Churn Rate',
+        current: churnData ? `${churnData.churnRate}%` : 'N/A',
+        target: '<5%',
+        status: churnData ? (churnData.churnRate <= 5 ? 'good' : churnData.churnRate <= 8 ? 'warning' : 'critical') : 'warning',
+        weight: 'Critical',
+        isLive: !!churnData,
+      },
+      {
+        metric: 'Subscription % of Revenue',
+        current: subscriptionStats ? `${Math.round(subscriptionPct)}%` : 'N/A',
+        target: '>50%',
+        status: subscriptionPct >= 50 ? 'good' : subscriptionPct >= 30 ? 'warning' : 'critical',
+        weight: 'Critical',
+        isLive: !!subscriptionStats,
+      },
+      {
+        metric: 'Active Subscribers',
+        current: subscriptionStats ? subscriptionStats.activeSubscribers.toLocaleString() : 'N/A',
+        target: 'Growing',
+        status: subscriptionStats ? 'good' : 'warning',
+        weight: 'High',
+        isLive: !!subscriptionStats,
+      },
+      {
+        metric: 'MRR',
+        current: subscriptionStats ? `£${subscriptionStats.mrr.toLocaleString()}` : 'N/A',
+        target: 'Growing',
+        status: subscriptionStats ? 'good' : 'warning',
+        weight: 'High',
+        isLive: !!subscriptionStats,
+      },
+      {
+        metric: 'DTC % of Revenue',
+        current: '100%',
+        target: '>50%',
+        status: 'good',
+        weight: 'Medium',
+        isLive: true,
+      },
+      {
+        metric: 'CAC (Google Ads)',
+        current: 'N/A',
+        target: 'Need Ads Data',
+        status: 'warning',
+        weight: 'High',
+        isLive: false,
+      },
+    ];
     
     return {
       metrics,
       topProducts: topProducts || [],
       subscriptionMetrics,
+      acquirerScorecard,
       ga4Stats,
       dataSource: 'live',
       period,
@@ -122,6 +181,7 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
       metrics: [],
       topProducts: [],
       subscriptionMetrics: null,
+      acquirerScorecard: [],
       ga4Stats: null,
       dataSource: 'error', 
       error: String(error), 

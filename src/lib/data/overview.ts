@@ -29,6 +29,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const adsService = getGoogleAdsSheetService();
   
   try {
+    // Fetch current period stats
     const [
       firebloodStats, topgStats, dngStats,
       fbGA4, topgGA4Stats, dngGA4Stats,
@@ -43,6 +44,22 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       adsService ? adsService.getAccountSummary('Fireblood').catch(() => null) : null,
       adsService ? adsService.getAccountSummary('TopG').catch(() => null) : null,
     ]);
+    
+    // Fetch monthly historical data for revenue trend (last 6 months)
+    const [fbMonthly, topgMonthly, dngMonthly] = await Promise.all([
+      firebloodWoo ? firebloodWoo.getMonthlyRevenue(6).catch(() => []) : [],
+      topgWoo ? topgWoo.getMonthlyRevenue(6).catch(() => []) : [],
+      dngWoo ? dngWoo.getMonthlyRevenue(6).catch(() => []) : [],
+    ]);
+    
+    // Build revenue trend data
+    const revenueTrend = fbMonthly.map((fb, i) => ({
+      month: fb.month,
+      fireblood: fb.revenue,
+      topg: topgMonthly[i]?.revenue || 0,
+      dng: dngMonthly[i]?.revenue || 0,
+      total: fb.revenue + (topgMonthly[i]?.revenue || 0) + (dngMonthly[i]?.revenue || 0),
+    }));
     
     const fbRev = firebloodStats?.revenue || 0;
     const topgRev = topgStats?.revenue || 0;
@@ -212,6 +229,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     return {
       metrics,
       brandBreakdown,
+      revenueTrend,
       trafficOverview,
       adsOverview,
       adsSummary: { spend: totalAdSpend, conversions: totalAdConversions, revenue: totalAdRevenue, roas: blendedRoas },
@@ -224,6 +242,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     return { 
       metrics: [],
       brandBreakdown: [],
+      revenueTrend: [],
       trafficOverview: [],
       adsOverview: [],
       adsSummary: null,

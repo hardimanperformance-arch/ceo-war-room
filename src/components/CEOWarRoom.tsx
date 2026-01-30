@@ -145,8 +145,32 @@ export default function CEOWarRoom() {
         </div>
 
         <div className="grid grid-cols-12 gap-6">
+          {/* Revenue Trend Chart */}
+          {data.revenueTrend && data.revenueTrend.length > 0 && (
+            <div className="col-span-8 rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-black text-white">Revenue Trend (Last 6 Months)</h2>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-black">LIVE</span>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={data.revenueTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="month" stroke="#888" fontSize={12} />
+                  <YAxis stroke="#888" fontSize={12} tickFormatter={(v) => `£${(v/1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#18181b', border: '2px solid #3f3f46', borderRadius: '12px' }}
+                    formatter={(value: number) => [`£${value.toLocaleString()}`, '']}
+                  />
+                  <Area type="monotone" dataKey="fireblood" stackId="1" stroke="#FF4757" fill="#FF4757" fillOpacity={0.6} name="Fireblood" />
+                  <Area type="monotone" dataKey="topg" stackId="1" stroke="#00E676" fill="#00E676" fillOpacity={0.6} name="Top G" />
+                  <Area type="monotone" dataKey="dng" stackId="1" stroke="#AA80FF" fill="#AA80FF" fillOpacity={0.6} name="DNG" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           {/* Brand Breakdown Pie */}
-          <div className="col-span-12 rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
+          <div className={`${data.revenueTrend && data.revenueTrend.length > 0 ? 'col-span-4' : 'col-span-12'} rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6`}>
             <h2 className="text-xl font-black text-white mb-4">Brand Breakdown</h2>
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -363,7 +387,7 @@ export default function CEOWarRoom() {
               <h2 className="text-xl font-black text-white">Subscriptions</h2>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-black">LIVE</span>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-lg bg-zinc-800">
                 <div className="text-sm text-zinc-400">Active Subscribers</div>
                 <div className="text-3xl font-black text-white">{data.subscriptionMetrics.activeSubscribers?.toLocaleString() || 'N/A'}</div>
@@ -372,6 +396,36 @@ export default function CEOWarRoom() {
                 <div className="text-sm text-zinc-400">MRR</div>
                 <div className="text-3xl font-black text-emerald-400">£{data.subscriptionMetrics.mrr?.toLocaleString() || 'N/A'}</div>
               </div>
+              <div className={`p-4 rounded-lg ${data.subscriptionMetrics.churnRate && data.subscriptionMetrics.churnRate > 5 ? 'bg-amber-950 border border-amber-500' : 'bg-zinc-800'}`}>
+                <div className="text-sm text-zinc-400">Monthly Churn</div>
+                <div className={`text-3xl font-black ${data.subscriptionMetrics.churnRate && data.subscriptionMetrics.churnRate > 5 ? 'text-amber-400' : 'text-white'}`}>
+                  {data.subscriptionMetrics.churnRate ? `${data.subscriptionMetrics.churnRate}%` : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Acquirer Readiness Scorecard */}
+        {data.acquirerScorecard && data.acquirerScorecard.length > 0 && (
+          <div className="rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-black text-white">🎯 Acquirer Readiness Scorecard</h2>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500 text-white">CALCULATED</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {data.acquirerScorecard.map((item: any, i: number) => (
+                <div key={i} className={`p-4 rounded-xl border-2 ${getStatusBg(item.status)}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-sm text-zinc-400">{item.metric}</span>
+                    <span className={`text-xs px-2 py-1 rounded ${item.isLive ? 'bg-emerald-700 text-emerald-200' : 'bg-zinc-700 text-zinc-300'}`}>
+                      {item.weight}
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-white">{item.current}</div>
+                  <div className="text-sm text-zinc-400">Target: {item.target}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}

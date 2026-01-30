@@ -235,6 +235,84 @@ export class WooCommerceService {
     
     return products;
   }
+
+  async getMonthlyRevenue(months: number = 6): Promise<{ month: string; revenue: number; orders: number }[]> {
+    const results: { month: string; revenue: number; orders: number }[] = [];
+    const now = new Date();
+    
+    for (let i = months - 1; i >= 0; i--) {
+      const startDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+      
+      const monthName = startDate.toLocaleString('en-GB', { month: 'short' });
+      
+      try {
+        const stats = await this.getOrderStats('custom', {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        });
+        
+        results.push({
+          month: monthName,
+          revenue: stats.revenue,
+          orders: stats.orders,
+        });
+      } catch (error) {
+        results.push({ month: monthName, revenue: 0, orders: 0 });
+      }
+    }
+    
+    return results;
+  }
+
+  async getChurnData(): Promise<{ churnRate: number; cancelledThisMonth: number; activeStart: number } | null> {
+    try {
+      // Get cancelled subscriptions this month
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const cancelledUrl = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
+      cancelledUrl.searchParams.set('per_page', '100');
+      cancelledUrl.searchParams.set('status', 'cancelled');
+      
+      const cancelledResponse = await fetch(cancelledUrl.toString(), {
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+
+      if (!cancelledResponse.ok) {
+        return null;
+      }
+
+      const cancelledSubs = await cancelledResponse.json();
+      
+      // Count cancellations this month
+      const cancelledThisMonth = cancelledSubs.filter((sub: any) => {
+        const cancelDate = new Date(sub.date_modified || sub.date_created);
+        return cancelDate >= monthStart;
+      }).length;
+
+      // Get active subscriptions
+      const activeSubs = await this.getSubscriptions();
+      const activeCount = activeSubs.length;
+      
+      // Estimate start of month active (current + cancelled this month)
+      const activeStart = activeCount + cancelledThisMonth;
+      const churnRate = activeStart > 0 ? (cancelledThisMonth / activeStart) * 100 : 0;
+
+      return {
+        churnRate: Math.round(churnRate * 10) / 10,
+        cancelledThisMonth,
+        activeStart,
+      };
+    } catch (error) {
+      console.error('Error fetching churn data:', error);
+      return null;
+    }
+  }
 }
 
 // Factory functions for each store
