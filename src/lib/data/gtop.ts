@@ -71,9 +71,10 @@ export async function getGtopData(period: Period = 'month', dateRange?: DateRang
   }
   
   try {
-    const [periodStats, ga4Stats] = await Promise.all([
+    const [periodStats, ga4Stats, topProducts] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
+      woo ? woo.getTopProducts(period, dateRange, 10) : null,
     ]);
     
     const periodLabel = period === 'custom' && dateRange 
@@ -98,7 +99,7 @@ export async function getGtopData(period: Period = 'month', dateRange?: DateRang
       metrics: realMetrics,
       channelEconomics: mockData.channelEconomics,
       trafficTrend: mockData.trafficTrend,
-      topProducts: mockData.topProducts,
+      topProducts: topProducts && topProducts.length > 0 ? topProducts : mockData.topProducts,
       ga4Stats,
       dataSource: 'live',
       period,

@@ -203,6 +203,38 @@ export class WooCommerceService {
       return null;
     }
   }
+
+  async getTopProducts(period: Period = 'month', customRange?: DateRange, limit: number = 10): Promise<{
+    name: string;
+    revenue: number;
+    units: number;
+  }[]> {
+    const orders = await this.getOrders(period, customRange);
+    
+    // Aggregate product sales from line items
+    const productMap = new Map<string, { revenue: number; units: number }>();
+    
+    for (const order of orders) {
+      for (const item of order.line_items) {
+        const existing = productMap.get(item.name) || { revenue: 0, units: 0 };
+        existing.revenue += parseFloat(item.total) || 0;
+        existing.units += item.quantity || 0;
+        productMap.set(item.name, existing);
+      }
+    }
+    
+    // Convert to array and sort by revenue
+    const products = Array.from(productMap.entries())
+      .map(([name, data]) => ({
+        name,
+        revenue: Math.round(data.revenue),
+        units: data.units,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, limit);
+    
+    return products;
+  }
 }
 
 // Factory functions for each store
