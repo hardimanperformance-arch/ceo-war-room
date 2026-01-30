@@ -28,7 +28,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
     const [wooStats, ga4Stats, sendlaneStats, topProducts] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       ga4 ? ga4.getTrafficStats(period, dateRange).catch(() => null) : null,
-      sendlane ? sendlane.getListStats().catch(() => null) : null,
+      sendlane ? sendlane.getTotalSubscribers().catch(() => null) : null,
       woo ? woo.getTopProducts(period, dateRange, 10) : null,
     ]);
     
@@ -68,7 +68,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
       },
       { 
         label: 'Email List Size', 
-        value: sendlaneStats ? sendlaneStats.totalContacts.toLocaleString() : 'N/A', 
+        value: sendlaneStats ? sendlaneStats.totalSubscribers.toLocaleString() : 'N/A', 
         change: sendlaneStats ? 'LIVE' : 'Sendlane not connected', 
         changeType: 'positive', 
         status: 'good',
@@ -106,7 +106,7 @@ export async function getDngData(period: Period = 'month', dateRange?: DateRange
         avgOrderValue: wooStats?.avgOrderValue || 0,
         sessions,
         conversionRate: convRate,
-        emailListSize: sendlaneStats?.totalContacts || 0,
+        emailListSize: sendlaneStats?.totalSubscribers || 0,
       },
     };
   } catch (error) {
