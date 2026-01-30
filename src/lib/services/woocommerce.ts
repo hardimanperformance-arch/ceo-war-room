@@ -91,9 +91,8 @@ export class WooCommerceService {
     const { after, before } = this.getDateRange(period, customRange);
     let allOrders: Order[] = [];
     let page = 1;
-    let hasMore = true;
 
-    while (hasMore) {
+    while (true) {
       const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
       url.searchParams.set('after', after);
       url.searchParams.set('before', before);
@@ -106,7 +105,7 @@ export class WooCommerceService {
           'Authorization': this.getAuthHeader(),
           'Content-Type': 'application/json',
         },
-        next: { revalidate: 300 },
+        cache: 'no-store',
       });
 
       if (!response.ok) {
@@ -116,12 +115,12 @@ export class WooCommerceService {
       const orders: Order[] = await response.json();
       allOrders = allOrders.concat(orders);
 
-      // Check if there are more pages
-      const totalPages = parseInt(response.headers.get('X-WP-TotalPages') || '1');
-      hasMore = page < totalPages;
+      // If we got less than 100, we've reached the end
+      if (orders.length < 100) break;
+      
       page++;
 
-      // Safety limit to prevent infinite loops
+      // Safety limit
       if (page > 50) break;
     }
 
