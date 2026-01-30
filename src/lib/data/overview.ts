@@ -1,7 +1,8 @@
-// Overview data - aggregates from all brands with live WooCommerce + GA4 data
+// Overview data - aggregates from all brands with live WooCommerce + GA4 + Google Ads data
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 import { getFirebloodGA4, getTopgGA4, getDngGA4 } from '../services/ga4';
+import { getGoogleSheetsAdsService } from '../services/googlesheets-ads';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
