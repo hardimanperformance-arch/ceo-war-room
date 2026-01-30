@@ -11,30 +11,6 @@ interface DateRange {
   end: string;
 }
 
-const mockData = {
-  metrics: [
-    { label: 'Total Revenue (All Brands)', value: '£847,230', change: '+6.8%', changeType: 'positive', status: 'good' },
-    { label: 'Fireblood Revenue', value: '£712,154', change: '+8.2%', changeType: 'positive', status: 'good', color: '#FF4757' },
-    { label: 'Gtop Revenue', value: '£98,420', change: '+3.1%', changeType: 'positive', status: 'warning', color: '#00E676' },
-    { label: 'DNG Revenue', value: '£36,656', change: '-12.4%', changeType: 'negative', status: 'warning', color: '#AA80FF' },
-    { label: 'Total Customers', value: '14,892', change: '+892', changeType: 'positive', status: 'good' },
-    { label: 'Blended CAC', value: '£16.40', change: '+£1.80', changeType: 'negative', status: 'warning' },
-  ],
-  revenueTrend: [
-    { month: 'Jul', fireblood: 580000, gtop: 112800, dng: 8200, total: 701000 },
-    { month: 'Aug', fireblood: 612000, gtop: 106400, dng: 6800, total: 725200 },
-    { month: 'Sep', fireblood: 645000, gtop: 102800, dng: 7400, total: 755200 },
-    { month: 'Oct', fireblood: 668000, gtop: 101200, dng: 18240, total: 787440 },
-    { month: 'Nov', fireblood: 690000, gtop: 99800, dng: 5200, total: 795000 },
-    { month: 'Dec', fireblood: 712154, gtop: 98420, dng: 36656, total: 847230 },
-  ],
-  brandBreakdown: [
-    { name: 'Fireblood', value: 712154, color: '#FF4757' },
-    { name: 'Gtop', value: 98420, color: '#00E676' },
-    { name: 'DNG', value: 36656, color: '#AA80FF' },
-  ],
-};
-
 const periodLabels: Record<Period, string> = {
   today: 'Today',
   week: 'This Week',
@@ -51,13 +27,6 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const topgGA4 = getTopgGA4();
   const dngGA4 = getDngGA4();
   const adsService = getGoogleAdsSheetService();
-  
-  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || firebloodGA4 || topgGA4 || dngGA4 || adsService;
-  
-  if (!hasAnyApi) {
-    console.log('Using mock overview data - no APIs configured');
-    return { ...mockData, dataSource: 'mock', period };
-  }
   
   try {
     const [
@@ -90,18 +59,17 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const topgSessions = topgGA4Stats?.sessions || 0;
     const dngSessions = dngGA4Stats?.sessions || 0;
     const totalSessions = fbSessions + topgSessions + dngSessions;
-    const hasGA4 = fbGA4 || topgGA4Stats || dngGA4Stats;
-    
+
     const periodLabel = period === 'custom' && dateRange 
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
     
     // Calculate blended conversion rate
-    const conversionRate = hasGA4 && totalSessions > 0 
+    const conversionRate = totalSessions > 0 
       ? ((totalOrders / totalSessions) * 100).toFixed(2)
       : null;
     
-    const realMetrics = [
+    const metrics = [
       { 
         label: `Total Revenue (${periodLabel})`, 
         value: `£${Math.round(totalRev).toLocaleString()}`, 
@@ -120,7 +88,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!firebloodStats 
       },
       { 
-        label: 'Gtop Revenue', 
+        label: 'Top G Revenue', 
         value: topgStats ? `£${Math.round(topgRev).toLocaleString()}` : 'N/A', 
         change: topgStats ? 'LIVE' : 'Not connected', 
         changeType: 'positive', 
@@ -138,12 +106,12 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!dngStats 
       },
       { 
-        label: 'Total Sessions', 
-        value: hasGA4 ? totalSessions.toLocaleString() : 'N/A', 
-        change: hasGA4 ? 'LIVE' : 'GA4 not connected', 
+        label: 'Total Orders', 
+        value: totalOrders.toLocaleString(), 
+        change: 'LIVE', 
         changeType: 'positive', 
-        status: hasGA4 ? 'good' : 'warning',
-        isLive: !!hasGA4 
+        status: 'good',
+        isLive: true 
       },
       { 
         label: 'Blended Conv Rate', 
@@ -155,9 +123,9 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       },
     ];
     
-    const realBrandBreakdown = [
+    const brandBreakdown = [
       { name: 'Fireblood', value: Math.round(fbRev), color: '#FF4757', isLive: !!firebloodStats },
-      { name: 'Gtop', value: Math.round(topgRev), color: '#00E676', isLive: !!topgStats },
+      { name: 'Top G', value: Math.round(topgRev), color: '#00E676', isLive: !!topgStats },
       { name: 'DNG', value: Math.round(dngRev), color: '#AA80FF', isLive: !!dngStats },
     ];
     
@@ -204,13 +172,6 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       },
     ];
     
-    // Traffic breakdown for pie chart
-    const trafficBreakdown = [
-      { name: 'Fireblood', value: fbSessions, color: '#FF4757' },
-      { name: 'Top G', value: topgSessions, color: '#00E676' },
-      { name: 'DNG', value: dngSessions, color: '#AA80FF' },
-    ];
-    
     // Google Ads Overview
     const adsOverview = [
       {
@@ -249,25 +210,26 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const blendedRoas = totalAdSpend > 0 ? totalAdRevenue / totalAdSpend : 0;
     
     return {
-      metrics: realMetrics,
-      revenueTrend: mockData.revenueTrend,
-      brandBreakdown: realBrandBreakdown,
+      metrics,
+      brandBreakdown,
       trafficOverview,
-      trafficBreakdown,
       adsOverview,
       adsSummary: { spend: totalAdSpend, conversions: totalAdConversions, revenue: totalAdRevenue, roas: blendedRoas },
       dataSource: 'live',
       period,
       dateRange,
-      liveMetrics: {
-        fireblood: { woo: firebloodStats, ga4: fbGA4, ads: firebloodAds },
-        topg: { woo: topgStats, ga4: topgGA4Stats, ads: topgAds },
-        dng: { woo: dngStats, ga4: dngGA4Stats },
-        total: { revenue: totalRev, orders: totalOrders, sessions: totalSessions },
-      },
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
-    return { ...mockData, dataSource: 'mock', error: String(error), period };
+    return { 
+      metrics: [],
+      brandBreakdown: [],
+      trafficOverview: [],
+      adsOverview: [],
+      adsSummary: null,
+      dataSource: 'error', 
+      error: String(error), 
+      period 
+    };
   }
 }
