@@ -2,7 +2,7 @@
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 import { getFirebloodGA4, getTopgGA4, getDngGA4 } from '../services/ga4';
-import { getGoogleSheetsAdsService } from '../services/googlesheets-ads';
+import { getGoogleAdsSheetService } from '../services/googleads-sheet';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -50,8 +50,9 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const firebloodGA4 = getFirebloodGA4();
   const topgGA4 = getTopgGA4();
   const dngGA4 = getDngGA4();
+  const adsService = getGoogleAdsSheetService();
   
-  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || firebloodGA4 || topgGA4 || dngGA4;
+  const hasAnyApi = firebloodWoo || topgWoo || dngWoo || firebloodGA4 || topgGA4 || dngGA4 || adsService;
   
   if (!hasAnyApi) {
     console.log('Using mock overview data - no APIs configured');
@@ -61,7 +62,8 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   try {
     const [
       firebloodStats, topgStats, dngStats,
-      fbGA4, topgGA4Stats, dngGA4Stats
+      fbGA4, topgGA4Stats, dngGA4Stats,
+      firebloodAds, topgAds
     ] = await Promise.all([
       firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
       topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
@@ -69,6 +71,8 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       firebloodGA4 ? firebloodGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
       topgGA4 ? topgGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
       dngGA4 ? dngGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
+      adsService ? adsService.getAccountSummary('Fireblood').catch(() => null) : null,
+      adsService ? adsService.getAccountSummary('TopG').catch(() => null) : null,
     ]);
     
     const fbRev = firebloodStats?.revenue || 0;
@@ -207,18 +211,57 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       { name: 'DNG', value: dngSessions, color: '#AA80FF' },
     ];
     
+    // Google Ads Overview
+    const adsOverview = [
+      {
+        brand: 'Fireblood',
+        color: '#FF4757',
+        impressions: firebloodAds?.impressions || 0,
+        clicks: firebloodAds?.clicks || 0,
+        spend: firebloodAds?.spend || 0,
+        conversions: firebloodAds?.conversions || 0,
+        conversionValue: firebloodAds?.conversionValue || 0,
+        ctr: firebloodAds?.ctr || 0,
+        cpc: firebloodAds?.avgCpc || 0,
+        cpa: firebloodAds?.cpa || 0,
+        roas: firebloodAds?.roas || 0,
+        isLive: !!firebloodAds,
+      },
+      {
+        brand: 'Top G',
+        color: '#00E676',
+        impressions: topgAds?.impressions || 0,
+        clicks: topgAds?.clicks || 0,
+        spend: topgAds?.spend || 0,
+        conversions: topgAds?.conversions || 0,
+        conversionValue: topgAds?.conversionValue || 0,
+        ctr: topgAds?.ctr || 0,
+        cpc: topgAds?.avgCpc || 0,
+        cpa: topgAds?.cpa || 0,
+        roas: topgAds?.roas || 0,
+        isLive: !!topgAds,
+      },
+    ];
+    
+    const totalAdSpend = (firebloodAds?.spend || 0) + (topgAds?.spend || 0);
+    const totalAdConversions = (firebloodAds?.conversions || 0) + (topgAds?.conversions || 0);
+    const totalAdRevenue = (firebloodAds?.conversionValue || 0) + (topgAds?.conversionValue || 0);
+    const blendedRoas = totalAdSpend > 0 ? totalAdRevenue / totalAdSpend : 0;
+    
     return {
       metrics: realMetrics,
       revenueTrend: mockData.revenueTrend,
       brandBreakdown: realBrandBreakdown,
       trafficOverview,
       trafficBreakdown,
+      adsOverview,
+      adsSummary: { spend: totalAdSpend, conversions: totalAdConversions, revenue: totalAdRevenue, roas: blendedRoas },
       dataSource: 'live',
       period,
       dateRange,
       liveMetrics: {
-        fireblood: { woo: firebloodStats, ga4: fbGA4 },
-        topg: { woo: topgStats, ga4: topgGA4Stats },
+        fireblood: { woo: firebloodStats, ga4: fbGA4, ads: firebloodAds },
+        topg: { woo: topgStats, ga4: topgGA4Stats, ads: topgAds },
         dng: { woo: dngStats, ga4: dngGA4Stats },
         total: { revenue: totalRev, orders: totalOrders, sessions: totalSessions },
       },

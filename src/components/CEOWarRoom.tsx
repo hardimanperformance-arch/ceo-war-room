@@ -265,6 +265,79 @@ export default function CEOWarRoom() {
             </div>
           </div>
         )}
+
+        {/* Google Ads Overview Panel */}
+        {data.adsOverview && data.adsOverview.some((a: any) => a.isLive) && (
+          <div className="rounded-xl bg-zinc-900 border-2 border-zinc-800 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-black text-white">Google Ads Performance (Last 30 Days)</h2>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500 text-white">LIVE</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-zinc-700">
+                    <th className="text-left py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Account</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Spend</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Impressions</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Clicks</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">CTR</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">CPC</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Conversions</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">CPA</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">Conv Value</th>
+                    <th className="text-right py-3 px-4 text-zinc-400 font-bold text-xs uppercase">ROAS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.adsOverview.filter((row: any) => row.isLive).map((row: any, i: number) => (
+                    <tr key={i} className="border-b border-zinc-800">
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: row.color }}></div>
+                          <span className="font-bold text-white">{row.brand}</span>
+                          <span className="text-xs text-blue-400">●</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-right text-white font-bold">£{row.spend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.impressions.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.clicks.toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">{row.ctr.toFixed(2)}%</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">£{row.cpc.toFixed(2)}</td>
+                      <td className="py-4 px-4 text-right text-white font-bold">{row.conversions.toFixed(0)}</td>
+                      <td className="py-4 px-4 text-right text-zinc-400">£{row.cpa.toFixed(2)}</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-bold">£{row.conversionValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className={`py-4 px-4 text-right font-bold ${row.roas >= 3 ? 'text-emerald-400' : row.roas >= 2 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {row.roas.toFixed(2)}x
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Totals Row */}
+                  {data.adsSummary && (
+                    <tr className="border-t-2 border-zinc-600 bg-zinc-800">
+                      <td className="py-4 px-4 font-black text-white">TOTAL</td>
+                      <td className="py-4 px-4 text-right text-white font-black">£{data.adsSummary.spend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="py-4 px-4 text-right text-zinc-300 font-bold">
+                        {data.adsOverview.filter((r: any) => r.isLive).reduce((sum: number, r: any) => sum + r.impressions, 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-right text-zinc-300 font-bold">
+                        {data.adsOverview.filter((r: any) => r.isLive).reduce((sum: number, r: any) => sum + r.clicks, 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-right text-zinc-300">-</td>
+                      <td className="py-4 px-4 text-right text-zinc-300">-</td>
+                      <td className="py-4 px-4 text-right text-white font-black">{data.adsSummary.conversions.toFixed(0)}</td>
+                      <td className="py-4 px-4 text-right text-zinc-300">£{(data.adsSummary.spend / data.adsSummary.conversions).toFixed(2)}</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-black">£{data.adsSummary.revenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className={`py-4 px-4 text-right font-black ${data.adsSummary.roas >= 3 ? 'text-emerald-400' : data.adsSummary.roas >= 2 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {data.adsSummary.roas.toFixed(2)}x
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
