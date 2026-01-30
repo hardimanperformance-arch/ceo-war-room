@@ -557,9 +557,9 @@ export default function CEOWarRoom() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span className="text-white font-semibold text-sm">All systems operational</span>
+              <span className="text-white font-semibold text-sm">Connected Systems</span>
             </div>
-            {['GA4', 'WooCommerce', 'TikTok Shop', 'Amazon SP-API', 'Sendlane'].map((system) => (
+            {['GA4', 'WooCommerce', 'Sendlane', 'Google Ads'].map((system) => (
               <div key={system} className="flex items-center gap-2">
                 <span className="text-zinc-400 text-sm">{system}</span>
                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
