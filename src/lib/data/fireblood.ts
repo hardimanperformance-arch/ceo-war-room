@@ -1,7 +1,8 @@
-// Fireblood data - pulls from real WooCommerce + GA4 APIs
+// Fireblood data - pulls from real WooCommerce + GA4 + Google Ads APIs
 
 import { getFirebloodWoo } from '../services/woocommerce';
 import { getFirebloodGA4 } from '../services/ga4';
+import { getGoogleAdsSheetService } from '../services/googleads-sheet';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -21,14 +22,16 @@ const periodLabels: Record<Period, string> = {
 export async function getFirebloodData(period: Period = 'month', dateRange?: DateRange) {
   const woo = getFirebloodWoo();
   const ga4 = getFirebloodGA4();
+  const adsService = getGoogleAdsSheetService();
   
   try {
-    const [periodStats, subscriptionStats, ga4Stats, topProducts, churnData] = await Promise.all([
+    const [periodStats, subscriptionStats, ga4Stats, topProducts, churnData, adsData] = await Promise.all([
       woo ? woo.getOrderStats(period, dateRange) : null,
       woo ? woo.getSubscriptionStats() : null,
       ga4 ? ga4.getTrafficStats(period, dateRange) : null,
       woo ? woo.getTopProducts(period, dateRange, 10) : null,
       woo ? woo.getChurnData() : null,
+      adsService ? adsService.getAccountSummary('Fireblood').catch(() => null) : null,
     ]);
     
     const dtcRevenue = periodStats ? Math.round(periodStats.revenue) : 0;
@@ -106,6 +109,18 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
     const subscriptionRevenue = subscriptionStats?.mrr || 0;
     const subscriptionPct = totalRevenue > 0 ? (subscriptionRevenue / totalRevenue) * 100 : 0;
     
+    // CAC from Google Ads (CPA)
+    const cac = adsData?.cpa || null;
+    
+    // LTV calculation: (AOV * Purchase Frequency * Customer Lifespan) or (MRR / Churn Rate) for subs
+    // Simple estimate: AOV * 2.5 (average repeat purchases) for now
+    const aov = periodStats?.avgOrderValue || 0;
+    const estimatedLtv = aov * 2.5;
+    const ltvCacRatio = cac && cac > 0 ? estimatedLtv / cac : null;
+    
+    // ROAS from Google Ads
+    const roas = adsData?.roas || null;
+    
     const acquirerScorecard = [
       {
         metric: 'Monthly Churn Rate',
@@ -124,20 +139,28 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
         isLive: !!subscriptionStats,
       },
       {
-        metric: 'Active Subscribers',
-        current: subscriptionStats ? subscriptionStats.activeSubscribers.toLocaleString() : 'N/A',
-        target: 'Growing',
-        status: subscriptionStats ? 'good' : 'warning',
+        metric: 'CAC (Google Ads)',
+        current: cac ? `£${cac.toFixed(2)}` : 'N/A',
+        target: '<£40',
+        status: cac ? (cac <= 40 ? 'good' : cac <= 60 ? 'warning' : 'critical') : 'warning',
         weight: 'High',
-        isLive: !!subscriptionStats,
+        isLive: !!cac,
       },
       {
-        metric: 'MRR',
-        current: subscriptionStats ? `£${subscriptionStats.mrr.toLocaleString()}` : 'N/A',
-        target: 'Growing',
-        status: subscriptionStats ? 'good' : 'warning',
+        metric: 'LTV:CAC Ratio',
+        current: ltvCacRatio ? `${ltvCacRatio.toFixed(1)}:1` : 'N/A',
+        target: '>3:1',
+        status: ltvCacRatio ? (ltvCacRatio >= 3 ? 'good' : ltvCacRatio >= 2 ? 'warning' : 'critical') : 'warning',
+        weight: 'Critical',
+        isLive: !!ltvCacRatio,
+      },
+      {
+        metric: 'ROAS (Google Ads)',
+        current: roas ? `${roas.toFixed(2)}x` : 'N/A',
+        target: '>2x',
+        status: roas ? (roas >= 2 ? 'good' : roas >= 1.5 ? 'warning' : 'critical') : 'warning',
         weight: 'High',
-        isLive: !!subscriptionStats,
+        isLive: !!roas,
       },
       {
         metric: 'DTC % of Revenue',
@@ -146,14 +169,6 @@ export async function getFirebloodData(period: Period = 'month', dateRange?: Dat
         status: 'good',
         weight: 'Medium',
         isLive: true,
-      },
-      {
-        metric: 'CAC (Google Ads)',
-        current: 'N/A',
-        target: 'Need Ads Data',
-        status: 'warning',
-        weight: 'High',
-        isLive: false,
       },
     ];
     
