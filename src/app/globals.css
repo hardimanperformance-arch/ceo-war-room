@@ -7,28 +7,151 @@
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 9, 9, 11;
+  --accent-red: #FF4757;
+  --accent-green: #10B981;
+  --accent-amber: #F59E0B;
+  --accent-purple: #AA80FF;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #27272a;
-  border-radius: 6px;
+  background: #18181b;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #52525b;
-  border-radius: 6px;
+  background: #3f3f46;
+  border-radius: 4px;
+  border: 2px solid #18181b;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: #52525b;
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #27272a 0%,
+    #3f3f46 50%,
+    #27272a 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Glass effect for cards */
+.glass {
+  background: rgba(39, 39, 42, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(63, 63, 70, 0.5);
+}
+
+/* Status glow effects */
+.glow-green {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+}
+
+.glow-red {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+.glow-amber {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+}
+
+/* Metric card hover effect */
+.metric-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Table row hover */
+.table-row-hover {
+  transition: background-color 0.15s ease;
+}
+
+.table-row-hover:hover {
+  background-color: rgba(63, 63, 70, 0.3);
+}
+
+/* Pulse dot animation */
+.pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Chart tooltip styling */
+.recharts-tooltip-wrapper {
+  z-index: 100;
+}
+
+/* Tab underline animation */
+.tab-underline {
+  position: relative;
+}
+
+.tab-underline::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--accent-red);
+  transform: scaleX(0);
+  transition: transform 0.2s ease;
+}
+
+.tab-underline.active::after {
+  transform: scaleX(1);
+}
+
+/* Responsive breakpoints helper classes */
+@layer utilities {
+  .hide-mobile {
+    @apply hidden md:block;
+  }
+
+  .show-mobile {
+    @apply block md:hidden;
+  }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-green);
+  outline-offset: 2px;
+}
+
+/* Number formatting - tabular figures */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
