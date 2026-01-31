@@ -33,7 +33,7 @@ interface AccountSummary {
 
 // Cache TTL
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes (ads data changes less frequently)
-const API_TIMEOUT = 8000; // 8 seconds (must fit within Vercel's function timeout)
+const API_TIMEOUT = 5000; // 5 seconds (Vercel free = 10s total)
 
 export class GoogleAdsSheetService {
   private sheets: ReturnType<typeof google.sheets>;

@@ -49,8 +49,8 @@ const CACHE_TTL = {
   monthly: 10 * 60 * 1000,       // 10 minutes for monthly data
 };
 
-// API timeout (must fit within Vercel's function timeout)
-const API_TIMEOUT = 8000; // 8 seconds
+// API timeout (Vercel free tier = 10s total, so keep individual calls short)
+const API_TIMEOUT = 5000; // 5 seconds
 
 export class WooCommerceService {
   private config: WooCommerceConfig;

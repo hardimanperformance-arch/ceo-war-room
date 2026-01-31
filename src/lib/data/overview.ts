@@ -1,4 +1,5 @@
 // Overview data - aggregates from all brands with live WooCommerce + GA4 + Google Ads data
+// Optimized for Vercel free tier (10s function timeout)
 
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 import { getFirebloodGA4, getTopgGA4, getDngGA4 } from '../services/ga4';
@@ -19,6 +20,15 @@ const periodLabels: Record<Period, string> = {
   custom: 'Custom Range',
 };
 
+// Safe wrapper - returns null on any error
+async function safeCall<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
+}
+
 export async function getOverviewData(period: Period = 'month', dateRange?: DateRange) {
   const firebloodWoo = getFirebloodWoo();
   const topgWoo = getTopgWoo();
@@ -27,129 +37,141 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const topgGA4 = getTopgGA4();
   const dngGA4 = getDngGA4();
   const adsService = getGoogleAdsSheetService();
-  
+
   try {
-    // Fetch current period stats
+    // SINGLE Promise.all for everything - must complete within Vercel's 10s limit
     const [
-      firebloodStats, topgStats, dngStats,
-      fbGA4, topgGA4Stats, dngGA4Stats,
-      firebloodAds, topgAds
+      firebloodStats,
+      topgStats,
+      dngStats,
+      fbGA4,
+      topgGA4Stats,
+      dngGA4Stats,
+      firebloodAds,
+      topgAds,
+      fbMonthly,
+      topgMonthly,
+      dngMonthly,
     ] = await Promise.all([
-      firebloodWoo ? firebloodWoo.getOrderStats(period, dateRange) : null,
-      topgWoo ? topgWoo.getOrderStats(period, dateRange) : null,
-      dngWoo ? dngWoo.getOrderStats(period, dateRange) : null,
-      firebloodGA4 ? firebloodGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
-      topgGA4 ? topgGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
-      dngGA4 ? dngGA4.getTrafficStats(period, dateRange).catch(() => null) : null,
-      adsService ? adsService.getAccountSummary('Fireblood').catch(() => null) : null,
-      adsService ? adsService.getAccountSummary('TopG').catch(() => null) : null,
+      // WooCommerce order stats
+      safeCall(() => firebloodWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
+      safeCall(() => topgWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
+      safeCall(() => dngWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
+      // GA4 traffic
+      safeCall(() => firebloodGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
+      safeCall(() => topgGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
+      safeCall(() => dngGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
+      // Google Ads
+      safeCall(() => adsService?.getAccountSummary('Fireblood') ?? Promise.resolve(null)),
+      safeCall(() => adsService?.getAccountSummary('TopG') ?? Promise.resolve(null)),
+      // Monthly revenue (already cached for 10 min after first call)
+      safeCall(() => firebloodWoo?.getMonthlyRevenue(6) ?? Promise.resolve([])),
+      safeCall(() => topgWoo?.getMonthlyRevenue(6) ?? Promise.resolve([])),
+      safeCall(() => dngWoo?.getMonthlyRevenue(6) ?? Promise.resolve([])),
     ]);
-    
-    // Fetch monthly historical data for revenue trend (last 6 months)
-    const [fbMonthly, topgMonthly, dngMonthly] = await Promise.all([
-      firebloodWoo ? firebloodWoo.getMonthlyRevenue(6).catch(() => []) : [],
-      topgWoo ? topgWoo.getMonthlyRevenue(6).catch(() => []) : [],
-      dngWoo ? dngWoo.getMonthlyRevenue(6).catch(() => []) : [],
-    ]);
-    
+
     // Build revenue trend data
-    const revenueTrend = fbMonthly.map((fb, i) => ({
+    const fbMonthlyData = fbMonthly || [];
+    const topgMonthlyData = topgMonthly || [];
+    const dngMonthlyData = dngMonthly || [];
+
+    const revenueTrend = fbMonthlyData.map((fb: { month: string; revenue: number }, i: number) => ({
       month: fb.month,
       fireblood: fb.revenue,
-      topg: topgMonthly[i]?.revenue || 0,
-      dng: dngMonthly[i]?.revenue || 0,
-      total: fb.revenue + (topgMonthly[i]?.revenue || 0) + (dngMonthly[i]?.revenue || 0),
+      topg: topgMonthlyData[i]?.revenue || 0,
+      dng: dngMonthlyData[i]?.revenue || 0,
+      total: fb.revenue + (topgMonthlyData[i]?.revenue || 0) + (dngMonthlyData[i]?.revenue || 0),
     }));
-    
+
     const fbRev = firebloodStats?.revenue || 0;
     const topgRev = topgStats?.revenue || 0;
     const dngRev = dngStats?.revenue || 0;
     const totalRev = fbRev + topgRev + dngRev;
-    
+
     const fbOrders = firebloodStats?.orders || 0;
     const topgOrders = topgStats?.orders || 0;
     const dngOrders = dngStats?.orders || 0;
     const totalOrders = fbOrders + topgOrders + dngOrders;
-    
+
     // GA4 traffic data
     const fbSessions = fbGA4?.sessions || 0;
     const topgSessions = topgGA4Stats?.sessions || 0;
     const dngSessions = dngGA4Stats?.sessions || 0;
     const totalSessions = fbSessions + topgSessions + dngSessions;
 
-    const periodLabel = period === 'custom' && dateRange 
+    const periodLabel = period === 'custom' && dateRange
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
-    
+
     // Calculate blended conversion rate
-    const conversionRate = totalSessions > 0 
+    const conversionRate = totalSessions > 0
       ? ((totalOrders / totalSessions) * 100).toFixed(2)
       : null;
-    
+
     const metrics = [
-      { 
-        label: `Total Revenue (${periodLabel})`, 
-        value: `£${Math.round(totalRev).toLocaleString()}`, 
-        change: 'LIVE', 
-        changeType: 'positive', 
+      {
+        label: `Total Revenue (${periodLabel})`,
+        value: `£${Math.round(totalRev).toLocaleString()}`,
+        change: 'LIVE',
+        changeType: 'positive',
         status: 'good',
-        isLive: true 
+        isLive: true
       },
-      { 
-        label: 'Fireblood Revenue', 
-        value: firebloodStats ? `£${Math.round(fbRev).toLocaleString()}` : 'N/A', 
-        change: firebloodStats ? 'LIVE' : 'Not connected', 
-        changeType: 'positive', 
-        status: firebloodStats ? 'good' : 'warning', 
+      {
+        label: 'Fireblood Revenue',
+        value: firebloodStats ? `£${Math.round(fbRev).toLocaleString()}` : 'N/A',
+        change: firebloodStats ? 'LIVE' : 'Not connected',
+        changeType: 'positive',
+        status: firebloodStats ? 'good' : 'warning',
         color: '#FF4757',
-        isLive: !!firebloodStats 
+        isLive: !!firebloodStats
       },
-      { 
-        label: 'Top G Revenue', 
-        value: topgStats ? `£${Math.round(topgRev).toLocaleString()}` : 'N/A', 
-        change: topgStats ? 'LIVE' : 'Not connected', 
-        changeType: 'positive', 
-        status: topgStats ? 'good' : 'warning', 
+      {
+        label: 'Top G Revenue',
+        value: topgStats ? `£${Math.round(topgRev).toLocaleString()}` : 'N/A',
+        change: topgStats ? 'LIVE' : 'Not connected',
+        changeType: 'positive',
+        status: topgStats ? 'good' : 'warning',
         color: '#00E676',
-        isLive: !!topgStats 
+        isLive: !!topgStats
       },
-      { 
-        label: 'DNG Revenue', 
-        value: dngStats ? `£${Math.round(dngRev).toLocaleString()}` : 'N/A', 
-        change: dngStats ? 'LIVE' : 'Not connected', 
-        changeType: 'positive', 
-        status: dngStats ? 'good' : 'warning', 
+      {
+        label: 'DNG Revenue',
+        value: dngStats ? `£${Math.round(dngRev).toLocaleString()}` : 'N/A',
+        change: dngStats ? 'LIVE' : 'Not connected',
+        changeType: 'positive',
+        status: dngStats ? 'good' : 'warning',
         color: '#AA80FF',
-        isLive: !!dngStats 
+        isLive: !!dngStats
       },
-      { 
-        label: 'Total Orders', 
-        value: totalOrders.toLocaleString(), 
-        change: 'LIVE', 
-        changeType: 'positive', 
+      {
+        label: 'Total Orders',
+        value: totalOrders.toLocaleString(),
+        change: 'LIVE',
+        changeType: 'positive',
         status: 'good',
-        isLive: true 
+        isLive: true
       },
-      { 
-        label: 'Blended Conv Rate', 
-        value: conversionRate ? `${conversionRate}%` : 'N/A', 
-        change: conversionRate ? 'LIVE' : 'Need GA4', 
-        changeType: 'positive', 
+      {
+        label: 'Blended Conv Rate',
+        value: conversionRate ? `${conversionRate}%` : 'N/A',
+        change: conversionRate ? 'LIVE' : 'Need GA4',
+        changeType: 'positive',
         status: conversionRate ? 'good' : 'warning',
-        isLive: !!conversionRate 
+        isLive: !!conversionRate
       },
     ];
-    
+
     const brandBreakdown = [
       { name: 'Fireblood', value: Math.round(fbRev), color: '#FF4757', isLive: !!firebloodStats },
       { name: 'Top G', value: Math.round(topgRev), color: '#00E676', isLive: !!topgStats },
       { name: 'DNG', value: Math.round(dngRev), color: '#AA80FF', isLive: !!dngStats },
     ];
-    
+
     // Traffic Overview by Brand (GA4 data)
     const trafficOverview = [
-      { 
-        brand: 'Fireblood', 
+      {
+        brand: 'Fireblood',
         color: '#FF4757',
         sessions: fbSessions,
         users: fbGA4?.totalUsers || 0,
@@ -161,8 +183,8 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         convRate: fbSessions > 0 ? ((fbOrders / fbSessions) * 100) : 0,
         isLive: !!fbGA4,
       },
-      { 
-        brand: 'Top G', 
+      {
+        brand: 'Top G',
         color: '#00E676',
         sessions: topgSessions,
         users: topgGA4Stats?.totalUsers || 0,
@@ -174,8 +196,8 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         convRate: topgSessions > 0 ? ((topgOrders / topgSessions) * 100) : 0,
         isLive: !!topgGA4Stats,
       },
-      { 
-        brand: 'DNG', 
+      {
+        brand: 'DNG',
         color: '#AA80FF',
         sessions: dngSessions,
         users: dngGA4Stats?.totalUsers || 0,
@@ -188,7 +210,7 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!dngGA4Stats,
       },
     ];
-    
+
     // Google Ads Overview
     const adsOverview = [
       {
@@ -220,12 +242,12 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
         isLive: !!topgAds,
       },
     ];
-    
+
     const totalAdSpend = (firebloodAds?.spend || 0) + (topgAds?.spend || 0);
     const totalAdConversions = (firebloodAds?.conversions || 0) + (topgAds?.conversions || 0);
     const totalAdRevenue = (firebloodAds?.conversionValue || 0) + (topgAds?.conversionValue || 0);
     const blendedRoas = totalAdSpend > 0 ? totalAdRevenue / totalAdSpend : 0;
-    
+
     return {
       metrics,
       brandBreakdown,
@@ -239,16 +261,16 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
-    return { 
+    return {
       metrics: [],
       brandBreakdown: [],
       revenueTrend: [],
       trafficOverview: [],
       adsOverview: [],
       adsSummary: null,
-      dataSource: 'error', 
-      error: String(error), 
-      period 
+      dataSource: 'error',
+      error: String(error),
+      period
     };
   }
 }
