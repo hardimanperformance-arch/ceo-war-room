@@ -22,7 +22,7 @@ interface GA4Config {
 
 // Cache TTL
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const API_TIMEOUT = 10000; // 10 seconds
+const API_TIMEOUT = 8000; // 8 seconds (must fit within Vercel's function timeout)
 
 export class GA4Service {
   private analyticsDataClient: ReturnType<typeof google.analyticsdata>;
