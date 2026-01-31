@@ -201,22 +201,55 @@ export class WooCommerceService {
     orders: number;
     avgOrderValue: number;
   }> {
-    try {
-      // getOrders already has internal timeout handling per-page, don't double-wrap
-      const orders = await this.getOrders(period, customRange);
+    const { after, before } = this.getDateRange(period, customRange);
+    const cacheKey = `woo:${this.config.name}:stats:${after}:${before}`;
 
-      const revenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
-      const orderCount = orders.length;
-      const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
+    return cached(
+      cacheKey,
+      async () => {
+        try {
+          // Use WooCommerce Reports API for fast aggregated stats (single request)
+          const url = new URL(`${this.config.url}/wp-json/wc/v3/reports/sales`);
+          url.searchParams.set('date_min', after.split('T')[0]);
+          url.searchParams.set('date_max', before.split('T')[0]);
 
-      return {
-        revenue: Math.round(revenue),
-        orders: orderCount,
-        avgOrderValue: Math.round(avgOrderValue * 100) / 100,
-      };
-    } catch {
-      return { revenue: 0, orders: 0, avgOrderValue: 0 };
-    }
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+          const response = await fetch(url.toString(), {
+            headers: {
+              'Authorization': this.getAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`WooCommerce Reports API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          // WooCommerce returns array with one totals object
+          const totals = Array.isArray(data) ? data[0] : data;
+
+          const revenue = parseFloat(totals?.total_sales || '0');
+          const orderCount = parseInt(totals?.total_orders || '0');
+          const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
+
+          return {
+            revenue: Math.round(revenue),
+            orders: orderCount,
+            avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+          };
+        } catch {
+          return { revenue: 0, orders: 0, avgOrderValue: 0 };
+        }
+      },
+      CACHE_TTL.orders
+    );
   }
 
   async getSubscriptionStats(): Promise<{
