@@ -10,11 +10,11 @@ interface TimePeriodSelectorProps {
   onChange: (period: TimePeriod, range?: DateRange) => void;
 }
 
-const PRESETS: { id: TimePeriod; label: string }[] = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: 'This Week' },
-  { id: 'month', label: 'This Month' },
-  { id: 'year', label: 'This Year' },
+const PRESETS: { id: TimePeriod; label: string; shortLabel: string }[] = [
+  { id: 'today', label: 'Today', shortLabel: 'Today' },
+  { id: 'week', label: 'Last 7 Days', shortLabel: '7D' },
+  { id: 'month', label: 'Last 30 Days', shortLabel: '30D' },
+  { id: 'year', label: 'Last 365 Days', shortLabel: '1Y' },
 ];
 
 const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -52,10 +52,12 @@ const TimePeriodSelector = memo(function TimePeriodSelector({
   }, [onChange]);
 
   const handleDateClick = useCallback((date: Date) => {
-    if (!selecting) {
+    if (!selecting || selecting === 'start') {
+      // First click - set start date
       setSelecting('end');
       setTempRange({ start: date, end: date });
-    } else if (selecting === 'end') {
+    } else {
+      // Second click - set end date and apply
       const finalRange: DateRange = isAfter(date, tempRange.start)
         ? { start: tempRange.start, end: date }
         : { start: date, end: tempRange.start };
@@ -66,14 +68,8 @@ const TimePeriodSelector = memo(function TimePeriodSelector({
     }
   }, [selecting, tempRange.start, onChange]);
 
-  const handleStartDateClick = useCallback(() => {
+  const handleStartSelectMode = useCallback(() => {
     setSelecting('start');
-    setIsOpen(true);
-  }, []);
-
-  const handleEndDateClick = useCallback(() => {
-    setSelecting('end');
-    setIsOpen(true);
   }, []);
 
   const navigateMonth = useCallback((direction: -1 | 1) => {
@@ -154,32 +150,32 @@ const TimePeriodSelector = memo(function TimePeriodSelector({
             </div>
           </div>
 
-          {/* Custom Range */}
+          {/* Custom Range Display */}
           <div className="p-2 border-b border-zinc-700">
-            <div className="text-xs text-zinc-500 uppercase font-bold px-2 py-1 mb-2">Custom Range</div>
-            <div className="flex items-center gap-2 px-2">
-              <button
-                onClick={handleStartDateClick}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold border transition-all ${
-                  selecting === 'start'
-                    ? 'border-red-500 bg-red-500/20 text-white'
-                    : 'border-zinc-600 bg-zinc-800 text-zinc-300 hover:border-zinc-500'
-                }`}
-              >
-                {tempRange.start ? format(tempRange.start, 'MMM d, yyyy') : 'Start Date'}
-              </button>
-              <span className="text-zinc-500">→</span>
-              <button
-                onClick={handleEndDateClick}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold border transition-all ${
-                  selecting === 'end'
-                    ? 'border-red-500 bg-red-500/20 text-white'
-                    : 'border-zinc-600 bg-zinc-800 text-zinc-300 hover:border-zinc-500'
-                }`}
-              >
-                {tempRange.end ? format(tempRange.end, 'MMM d, yyyy') : 'End Date'}
-              </button>
+            <div className="flex items-center justify-between px-2">
+              <div className="text-xs text-zinc-500 uppercase font-bold">Custom Range</div>
+              {selecting && (
+                <span className="text-xs text-emerald-400 animate-pulse">
+                  {selecting === 'start' ? 'Click start date' : 'Click end date'}
+                </span>
+              )}
             </div>
+            <button
+              onClick={handleStartSelectMode}
+              className="w-full mt-2 px-3 py-2 rounded-lg text-sm font-bold border border-zinc-600 bg-zinc-800 text-zinc-300 hover:border-zinc-500 hover:text-white transition-all text-center"
+            >
+              {selecting ? (
+                <span>
+                  {format(tempRange.start, 'MMM d')} → {selecting === 'end' ? '...' : format(tempRange.end, 'MMM d')}
+                </span>
+              ) : value === 'custom' && customRange ? (
+                <span>
+                  {format(customRange.start, 'MMM d')} → {format(customRange.end, 'MMM d, yyyy')}
+                </span>
+              ) : (
+                <span>Click to select dates</span>
+              )}
+            </button>
           </div>
 
           {/* Calendar */}
@@ -248,10 +244,15 @@ const TimePeriodSelector = memo(function TimePeriodSelector({
             </div>
           </div>
 
-          {/* Instructions */}
+          {/* Cancel button when selecting */}
           {selecting && (
-            <div className="px-4 py-2 bg-zinc-800 text-center text-xs text-zinc-400 rounded-b-xl border-t border-zinc-700">
-              {selecting === 'start' ? 'Click to select start date' : 'Click to select end date'}
+            <div className="px-4 py-2 bg-zinc-800 text-center rounded-b-xl border-t border-zinc-700">
+              <button
+                onClick={() => setSelecting(null)}
+                className="text-xs text-zinc-400 hover:text-white transition-colors"
+              >
+                Cancel selection
+              </button>
             </div>
           )}
         </div>

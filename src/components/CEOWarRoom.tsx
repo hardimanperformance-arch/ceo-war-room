@@ -10,8 +10,14 @@ import TimePeriodSelector from './TimePeriodSelector';
 import type {
   Metric, BrandBreakdown, RevenueTrend, TrafficRow, AdsRow,
   AdsSummary, Product, SubscriptionMetrics, ScorecardItem, EmailStats,
-  DateRange, TimePeriod, TabId, Tab, OverviewData, BrandData, DashboardData
+  DateRange, TimePeriod, TabId, Tab, OverviewData, BrandData, DashboardData,
+  ComparisonPeriod, MetricWithDelta
 } from '../types/dashboard';
+import {
+  getPeriodDates, getPreviousPeriodDates, getComparisonLabel,
+  formatForApi, calculateDelta, parseMetricValue
+} from '../lib/utils/period';
+import AIInsights from './AIInsights';
 
 // ============================================================================
 // SKELETON COMPONENTS
@@ -103,10 +109,16 @@ const formatCurrency = (value: number, decimals = 0): string => {
 // ============================================================================
 
 interface MetricCardProps {
-  metric: Metric;
+  metric: MetricWithDelta;
+  comparisonLabel?: string;
 }
 
-const MetricCard = memo(function MetricCard({ metric }: MetricCardProps) {
+const MetricCard = memo(function MetricCard({ metric, comparisonLabel }: MetricCardProps) {
+  const hasDelta = metric.deltaPercent !== undefined && metric.deltaPercent !== null;
+  const deltaDirection = hasDelta
+    ? metric.deltaPercent! > 0.5 ? 'up' : metric.deltaPercent! < -0.5 ? 'down' : 'flat'
+    : null;
+
   return (
     <div className={`metric-card p-4 rounded-xl border-2 ${getStatusBg(metric.status)} transition-all`}>
       <div className="flex items-center justify-between mb-1">
@@ -122,7 +134,22 @@ const MetricCard = memo(function MetricCard({ metric }: MetricCardProps) {
         >
           {metric.value}
         </div>
-        {metric.change && (
+        {hasDelta ? (
+          <div className="flex flex-col items-end">
+            <div className={`text-sm font-bold whitespace-nowrap tabular-nums ${
+              deltaDirection === 'up' ? 'text-emerald-400' :
+              deltaDirection === 'down' ? 'text-red-400' : 'text-zinc-400'
+            }`}>
+              {deltaDirection === 'up' ? '↑' : deltaDirection === 'down' ? '↓' : ''}
+              {metric.deltaPercent! > 0 ? '+' : ''}{metric.deltaPercent!.toFixed(1)}%
+            </div>
+            {metric.previousValue && (
+              <div className="text-xs text-zinc-500 whitespace-nowrap">
+                was {metric.previousValue}
+              </div>
+            )}
+          </div>
+        ) : metric.change && (
           <div className={`text-xs font-bold whitespace-nowrap ${
             metric.changeType === 'positive' ? 'text-emerald-400' :
             metric.changeType === 'negative' ? 'text-red-400' : 'text-zinc-400'
@@ -198,9 +225,15 @@ const ProductList = memo(function ProductList({ products }: ProductListProps) {
 
 interface OverviewTabProps {
   data: OverviewData;
+  metricsWithDeltas: MetricWithDelta[];
+  comparisonLabel?: string;
+  comparisonLoading?: boolean;
+  previousData: DashboardData | null;
+  period: TimePeriod;
+  tab: TabId;
 }
 
-const OverviewTab = memo(function OverviewTab({ data }: OverviewTabProps) {
+const OverviewTab = memo(function OverviewTab({ data, metricsWithDeltas, comparisonLabel, comparisonLoading, previousData, period, tab }: OverviewTabProps) {
   const trafficTotals = useMemo(() => {
     if (!data.trafficOverview?.length) return null;
     const sessions = data.trafficOverview.reduce((sum, r) => sum + r.sessions, 0);
@@ -225,10 +258,26 @@ const OverviewTab = memo(function OverviewTab({ data }: OverviewTabProps) {
     <div className="space-y-6 animate-fade-in">
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        {data.metrics?.map((metric) => (
-          <MetricCard key={metric.label} metric={metric} />
+        {metricsWithDeltas.map((metric) => (
+          <MetricCard key={metric.label} metric={metric} comparisonLabel={comparisonLabel} />
         ))}
       </div>
+
+      {/* Comparison Loading Indicator */}
+      {comparisonLoading && (
+        <div className="text-center text-zinc-500 text-sm animate-pulse">
+          Loading comparison data...
+        </div>
+      )}
+
+      {/* AI Insights */}
+      <AIInsights
+        currentData={data}
+        previousData={previousData}
+        metricsWithDeltas={metricsWithDeltas}
+        period={period}
+        tab={tab}
+      />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -424,17 +473,38 @@ const OverviewTab = memo(function OverviewTab({ data }: OverviewTabProps) {
 interface BrandTabProps {
   data: BrandData;
   brandId: TabId;
+  metricsWithDeltas: MetricWithDelta[];
+  comparisonLabel?: string;
+  comparisonLoading?: boolean;
+  previousData: DashboardData | null;
+  period: TimePeriod;
 }
 
-const BrandTab = memo(function BrandTab({ data, brandId }: BrandTabProps) {
+const BrandTab = memo(function BrandTab({ data, brandId, metricsWithDeltas, comparisonLabel, comparisonLoading, previousData, period }: BrandTabProps) {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        {data.metrics?.map((metric) => (
-          <MetricCard key={metric.label} metric={metric} />
+        {metricsWithDeltas.map((metric) => (
+          <MetricCard key={metric.label} metric={metric} comparisonLabel={comparisonLabel} />
         ))}
       </div>
+
+      {/* Comparison Loading Indicator */}
+      {comparisonLoading && (
+        <div className="text-center text-zinc-500 text-sm animate-pulse">
+          Loading comparison data...
+        </div>
+      )}
+
+      {/* AI Insights */}
+      <AIInsights
+        currentData={data}
+        previousData={previousData}
+        metricsWithDeltas={metricsWithDeltas}
+        period={period}
+        tab={brandId}
+      />
 
       {/* Top Products */}
       {data.topProducts?.length > 0 && (
@@ -554,6 +624,11 @@ export default function CEOWarRoom() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Comparison state
+  const [comparisonEnabled, setComparisonEnabled] = useState(true);
+  const [comparisonData, setComparisonData] = useState<DashboardData | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+
   // Update clock - reduced frequency to every 10 seconds for performance
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 10000);
@@ -564,6 +639,7 @@ export default function CEOWarRoom() {
   const fetchData = useCallback(async (tab: TabId, period: TimePeriod, range: DateRange | null) => {
     setLoading(true);
     setError(null);
+    setComparisonData(null);
     try {
       let url = `/api/dashboard?tab=${tab}&period=${period}`;
       if (period === 'custom' && range) {
@@ -580,16 +656,89 @@ export default function CEOWarRoom() {
     }
   }, []);
 
+  // Fetch comparison data after main data loads
+  const fetchComparisonData = useCallback(async () => {
+    if (!comparisonEnabled) return;
+
+    setComparisonLoading(true);
+    try {
+      const currentDates = getPeriodDates(timePeriod, customRange || undefined);
+      const previousDates = getPreviousPeriodDates(currentDates, 'previous_period');
+
+      if (!previousDates) {
+        setComparisonData(null);
+        return;
+      }
+
+      const { startDate, endDate } = formatForApi(previousDates);
+      const url = `/api/dashboard?tab=${activeTab}&period=custom&startDate=${startDate}&endDate=${endDate}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setComparisonData(json);
+    } catch (err) {
+      console.error('Failed to fetch comparison data:', err);
+      setComparisonData(null);
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, [activeTab, timePeriod, customRange, comparisonEnabled]);
+
   // Fetch data when tab or time period changes
   useEffect(() => {
     fetchData(activeTab, timePeriod, customRange);
   }, [activeTab, timePeriod, customRange, fetchData]);
+
+  // Fetch comparison data after main data loads
+  useEffect(() => {
+    if (data && comparisonEnabled && !loading) {
+      fetchComparisonData();
+    }
+  }, [data, comparisonEnabled, loading, fetchComparisonData]);
 
   // Handle time period change
   const handleTimePeriodChange = useCallback((period: TimePeriod, range?: DateRange) => {
     setTimePeriod(period);
     setCustomRange(period === 'custom' && range ? range : null);
   }, []);
+
+  // Handle comparison toggle
+  const handleComparisonToggle = useCallback(() => {
+    setComparisonEnabled(prev => !prev);
+  }, []);
+
+  // Calculate metrics with deltas
+  const metricsWithDeltas = useMemo((): MetricWithDelta[] => {
+    if (!data || !('metrics' in data) || !data.metrics) return [];
+
+    const currentMetrics = data.metrics;
+    const previousMetrics = comparisonData && 'metrics' in comparisonData ? comparisonData.metrics : null;
+
+    return currentMetrics.map((metric, idx) => {
+      const prevMetric = previousMetrics?.[idx];
+      if (!prevMetric || !comparisonEnabled) {
+        return metric as MetricWithDelta;
+      }
+
+      const currentVal = parseMetricValue(metric.value);
+      const prevVal = parseMetricValue(prevMetric.value);
+      const delta = calculateDelta(currentVal, prevVal);
+
+      return {
+        ...metric,
+        previousValue: prevMetric.value,
+        previousRaw: prevVal,
+        currentRaw: currentVal,
+        deltaPercent: delta.percent,
+        deltaAbsolute: delta.absolute,
+      } as MetricWithDelta;
+    });
+  }, [data, comparisonData, comparisonEnabled]);
+
+  // Comparison label for display
+  const comparisonLabel = useMemo(() => {
+    return getComparisonLabel(timePeriod, comparisonEnabled ? 'previous_period' : 'none');
+  }, [timePeriod, comparisonEnabled]);
 
   // Handle tab change
   const handleTabChange = useCallback((tabId: TabId) => {
@@ -629,11 +778,31 @@ export default function CEOWarRoom() {
     if (!data) return null;
 
     if (activeTab === 'overview') {
-      return <OverviewTab data={data as OverviewData} />;
+      return (
+        <OverviewTab
+          data={data as OverviewData}
+          metricsWithDeltas={metricsWithDeltas}
+          comparisonLabel={comparisonLabel}
+          comparisonLoading={comparisonLoading}
+          previousData={comparisonData}
+          period={timePeriod}
+          tab={activeTab}
+        />
+      );
     }
 
-    return <BrandTab data={data as BrandData} brandId={activeTab} />;
-  }, [loading, error, data, activeTab, timePeriod, customRange, fetchData]);
+    return (
+      <BrandTab
+        data={data as BrandData}
+        brandId={activeTab}
+        metricsWithDeltas={metricsWithDeltas}
+        comparisonLabel={comparisonLabel}
+        comparisonLoading={comparisonLoading}
+        previousData={comparisonData}
+        period={timePeriod}
+      />
+    );
+  }, [loading, error, data, activeTab, timePeriod, customRange, fetchData, metricsWithDeltas, comparisonLabel, comparisonLoading, comparisonData]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -684,8 +853,19 @@ export default function CEOWarRoom() {
               ))}
             </div>
 
-            {/* Time Period Selector */}
-            <div className="py-2 flex-shrink-0">
+            {/* Time Period Selector + Comparison Toggle */}
+            <div className="py-2 flex-shrink-0 flex items-center gap-2">
+              <button
+                onClick={handleComparisonToggle}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  comparisonEnabled
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+                }`}
+                title={comparisonEnabled ? 'Comparison enabled' : 'Enable comparison'}
+              >
+                {comparisonEnabled ? '⟷ Compare ON' : '⟷ Compare'}
+              </button>
               <TimePeriodSelector
                 value={timePeriod}
                 customRange={customRange}

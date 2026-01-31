@@ -129,3 +129,35 @@ export interface Tab {
   icon: string;
   color: string;
 }
+
+// Comparison Types
+export type ComparisonPeriod = 'previous_period' | 'previous_year' | 'none';
+
+export interface MetricWithDelta extends Metric {
+  previousValue?: string;
+  previousRaw?: number;
+  currentRaw?: number;
+  deltaPercent?: number;
+  deltaAbsolute?: number;
+}
+
+export interface ComparisonData {
+  current: DashboardData;
+  previous: DashboardData | null;
+  comparisonPeriod: ComparisonPeriod;
+  comparisonLabel: string;
+}
+
+// AI Insights Types
+export type InsightType = 'alert' | 'opportunity' | 'win' | 'watch';
+export type InsightSeverity = 'high' | 'medium' | 'low';
+
+export interface AIInsight {
+  type: InsightType;
+  severity: InsightSeverity;
+  emoji: string;
+  title: string;
+  description: string;
+  metric?: string;
+  delta?: number;
+}
