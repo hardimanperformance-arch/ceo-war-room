@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '@/lib/services/woocommerce';
+import { getOverviewData } from '@/lib/data/overview';
 
 export async function GET() {
   const firebloodWoo = getFirebloodWoo();
@@ -26,32 +27,23 @@ export async function GET() {
     },
   };
 
-  // Test actual API call if service exists
+  // Test direct API calls
   if (firebloodWoo) {
     try {
       const stats = await firebloodWoo.getOrderStats('month');
-      results.firebloodStats = stats;
+      results.firebloodDirect = stats;
     } catch (e) {
-      results.firebloodError = String(e);
+      results.firebloodDirectError = String(e);
     }
   }
 
-  if (topgWoo) {
-    try {
-      const stats = await topgWoo.getOrderStats('month');
-      results.topgStats = stats;
-    } catch (e) {
-      results.topgError = String(e);
-    }
-  }
-
-  if (dngWoo) {
-    try {
-      const stats = await dngWoo.getOrderStats('month');
-      results.dngStats = stats;
-    } catch (e) {
-      results.dngError = String(e);
-    }
+  // Test getOverviewData to see what it returns
+  try {
+    const overview = await getOverviewData('month');
+    results.overviewMetrics = overview.metrics;
+    results.overviewDataSource = overview.dataSource;
+  } catch (e) {
+    results.overviewError = String(e);
   }
 
   return NextResponse.json(results);
