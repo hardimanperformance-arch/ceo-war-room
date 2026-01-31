@@ -202,11 +202,8 @@ export class WooCommerceService {
     avgOrderValue: number;
   }> {
     try {
-      const orders = await withTimeout(
-        this.getOrders(period, customRange),
-        API_TIMEOUT,
-        []
-      );
+      // getOrders already has internal timeout handling per-page, don't double-wrap
+      const orders = await this.getOrders(period, customRange);
 
       const revenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
       const orderCount = orders.length;
@@ -314,15 +311,11 @@ export class WooCommerceService {
           };
         });
 
-        // Fetch ALL months in parallel
+        // Fetch ALL months in parallel - getOrderStats has its own timeout handling
         const results = await Promise.all(
           monthRanges.map(async ({ monthName, start, end }) => {
             try {
-              const stats = await withTimeout(
-                this.getOrderStats('custom', { start, end }),
-                API_TIMEOUT,
-                { revenue: 0, orders: 0, avgOrderValue: 0 }
-              );
+              const stats = await this.getOrderStats('custom', { start, end });
               return { month: monthName, revenue: stats.revenue, orders: stats.orders };
             } catch {
               return { month: monthName, revenue: 0, orders: 0 };
