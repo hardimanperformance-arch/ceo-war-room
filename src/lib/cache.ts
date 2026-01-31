@@ -1,8 +1,11 @@
 // Simple in-memory cache with TTL for API responses
+// Cache version changes with each deployment to invalidate stale data
+const CACHE_VERSION = Date.now().toString(36);
 
 interface CacheEntry<T> {
   data: T;
   expiry: number;
+  version: string;
 }
 
 class Cache {
@@ -12,7 +15,8 @@ class Cache {
   get<T>(key: string): T | null {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
-    if (Date.now() > entry.expiry) {
+    // Invalidate if expired OR from different deployment
+    if (Date.now() > entry.expiry || entry.version !== CACHE_VERSION) {
       this.store.delete(key);
       return null;
     }
@@ -23,6 +27,7 @@ class Cache {
     this.store.set(key, {
       data,
       expiry: Date.now() + (ttlMs ?? this.defaultTTL),
+      version: CACHE_VERSION,
     });
   }
 
