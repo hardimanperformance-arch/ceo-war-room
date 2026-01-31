@@ -1,9 +1,13 @@
 // WooCommerce API Service for pulling live store data
+// With caching and timeout support for performance
+
+import { cached, withTimeout } from '../cache';
 
 interface WooCommerceConfig {
   url: string;
   consumerKey: string;
   consumerSecret: string;
+  name: string; // For cache key namespacing
 }
 
 interface Order {
@@ -37,6 +41,16 @@ interface DateRange {
 }
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+// Cache TTLs
+const CACHE_TTL = {
+  orders: 3 * 60 * 1000,        // 3 minutes for orders
+  subscriptions: 5 * 60 * 1000,  // 5 minutes for subscriptions
+  monthly: 10 * 60 * 1000,       // 10 minutes for monthly data
+};
+
+// API timeout
+const API_TIMEOUT = 15000; // 15 seconds
 
 export class WooCommerceService {
   private config: WooCommerceConfig;
@@ -87,65 +101,99 @@ export class WooCommerceService {
     };
   }
 
-  async getOrders(period: Period = 'month', customRange?: DateRange): Promise<Order[]> {
-    const { after, before } = this.getDateRange(period, customRange);
-    let allOrders: Order[] = [];
-    let page = 1;
+  private async fetchOrdersPage(after: string, before: string, page: number): Promise<Order[]> {
+    const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
+    url.searchParams.set('after', after);
+    url.searchParams.set('before', before);
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('status', 'completed,processing');
 
-    while (true) {
-      const url = new URL(`${this.config.url}/wp-json/wc/v3/orders`);
-      url.searchParams.set('after', after);
-      url.searchParams.set('before', before);
-      url.searchParams.set('per_page', '100');
-      url.searchParams.set('page', String(page));
-      url.searchParams.set('status', 'completed,processing');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
+    try {
       const response = await fetch(url.toString(), {
         headers: {
           'Authorization': this.getAuthHeader(),
           'Content-Type': 'application/json',
         },
         cache: 'no-store',
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`WooCommerce API error: ${response.status}`);
       }
 
-      const orders: Order[] = await response.json();
-      allOrders = allOrders.concat(orders);
-
-      // If we got less than 100, we've reached the end
-      if (orders.length < 100) break;
-      
-      page++;
-
-      // Safety limit
-      if (page > 50) break;
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
     }
+  }
 
-    return allOrders;
+  async getOrders(period: Period = 'month', customRange?: DateRange): Promise<Order[]> {
+    const { after, before } = this.getDateRange(period, customRange);
+    const cacheKey = `woo:${this.config.name}:orders:${after}:${before}`;
+
+    return cached(
+      cacheKey,
+      async () => {
+        let allOrders: Order[] = [];
+        let page = 1;
+
+        while (true) {
+          try {
+            const orders = await this.fetchOrdersPage(after, before, page);
+            allOrders = allOrders.concat(orders);
+
+            if (orders.length < 100) break;
+            page++;
+            if (page > 50) break; // Safety limit
+          } catch (error) {
+            // If we have some orders, return them; otherwise rethrow
+            if (allOrders.length > 0) break;
+            throw error;
+          }
+        }
+
+        return allOrders;
+      },
+      CACHE_TTL.orders
+    );
   }
 
   async getSubscriptions(): Promise<Subscription[]> {
-    const url = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('status', 'active');
+    const cacheKey = `woo:${this.config.name}:subscriptions`;
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': this.getAuthHeader(),
-        'Content-Type': 'application/json',
+    return cached(
+      cacheKey,
+      async () => {
+        const url = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
+        url.searchParams.set('per_page', '100');
+        url.searchParams.set('status', 'active');
+
+        const result = await withTimeout(
+          fetch(url.toString(), {
+            headers: {
+              'Authorization': this.getAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+          }).then(async (response) => {
+            if (!response.ok) return [];
+            return response.json();
+          }),
+          API_TIMEOUT,
+          []
+        );
+
+        return result;
       },
-      next: { revalidate: 300 },
-    });
-
-    if (!response.ok) {
-      console.log('Subscriptions API not available or error:', response.status);
-      return [];
-    }
-
-    return response.json();
+      CACHE_TTL.subscriptions
+    );
   }
 
   async getOrderStats(period: Period = 'month', customRange?: DateRange): Promise<{
@@ -153,17 +201,25 @@ export class WooCommerceService {
     orders: number;
     avgOrderValue: number;
   }> {
-    const orders = await this.getOrders(period, customRange);
-    
-    const revenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
-    const orderCount = orders.length;
-    const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
+    try {
+      const orders = await withTimeout(
+        this.getOrders(period, customRange),
+        API_TIMEOUT,
+        []
+      );
 
-    return {
-      revenue: Math.round(revenue),
-      orders: orderCount,
-      avgOrderValue: Math.round(avgOrderValue * 100) / 100,
-    };
+      const revenue = orders.reduce((sum, order) => sum + parseFloat(order.total), 0);
+      const orderCount = orders.length;
+      const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
+
+      return {
+        revenue: Math.round(revenue),
+        orders: orderCount,
+        avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+      };
+    } catch {
+      return { revenue: 0, orders: 0, avgOrderValue: 0 };
+    }
   }
 
   async getSubscriptionStats(): Promise<{
@@ -172,7 +228,7 @@ export class WooCommerceService {
   } | null> {
     try {
       const subscriptions = await this.getSubscriptions();
-      
+
       if (subscriptions.length === 0) {
         return null;
       }
@@ -181,7 +237,7 @@ export class WooCommerceService {
       const mrr = subscriptions.reduce((sum, sub) => {
         const total = parseFloat(sub.total);
         const interval = sub.billing_interval || 1;
-        
+
         switch (sub.billing_period) {
           case 'week':
             return sum + (total * 4.33 / interval);
@@ -198,8 +254,7 @@ export class WooCommerceService {
         activeSubscribers,
         mrr: Math.round(mrr),
       };
-    } catch (error) {
-      console.error('Error fetching subscription stats:', error);
+    } catch {
       return null;
     }
   }
@@ -209,109 +264,124 @@ export class WooCommerceService {
     revenue: number;
     units: number;
   }[]> {
-    const orders = await this.getOrders(period, customRange);
-    
-    // Aggregate product sales from line items
-    const productMap = new Map<string, { revenue: number; units: number }>();
-    
-    for (const order of orders) {
-      for (const item of order.line_items) {
-        const existing = productMap.get(item.name) || { revenue: 0, units: 0 };
-        existing.revenue += parseFloat(item.total) || 0;
-        existing.units += item.quantity || 0;
-        productMap.set(item.name, existing);
+    try {
+      const orders = await this.getOrders(period, customRange);
+
+      const productMap = new Map<string, { revenue: number; units: number }>();
+
+      for (const order of orders) {
+        for (const item of order.line_items) {
+          const existing = productMap.get(item.name) || { revenue: 0, units: 0 };
+          existing.revenue += parseFloat(item.total) || 0;
+          existing.units += item.quantity || 0;
+          productMap.set(item.name, existing);
+        }
       }
+
+      return Array.from(productMap.entries())
+        .map(([name, data]) => ({
+          name,
+          revenue: Math.round(data.revenue),
+          units: data.units,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, limit);
+    } catch {
+      return [];
     }
-    
-    // Convert to array and sort by revenue
-    const products = Array.from(productMap.entries())
-      .map(([name, data]) => ({
-        name,
-        revenue: Math.round(data.revenue),
-        units: data.units,
-      }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, limit);
-    
-    return products;
   }
 
+  // OPTIMIZED: Fetch all months in parallel instead of sequential
   async getMonthlyRevenue(months: number = 6): Promise<{ month: string; revenue: number; orders: number }[]> {
-    const results: { month: string; revenue: number; orders: number }[] = [];
-    const now = new Date();
-    
-    for (let i = months - 1; i >= 0; i--) {
-      const startDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
-      
-      const monthName = startDate.toLocaleString('en-GB', { month: 'short' });
-      
-      try {
-        const stats = await this.getOrderStats('custom', {
-          start: startDate.toISOString().split('T')[0],
-          end: endDate.toISOString().split('T')[0],
+    const cacheKey = `woo:${this.config.name}:monthly:${months}`;
+
+    return cached(
+      cacheKey,
+      async () => {
+        const now = new Date();
+
+        // Build array of month date ranges
+        const monthRanges = Array.from({ length: months }, (_, i) => {
+          const idx = months - 1 - i;
+          const startDate = new Date(now.getFullYear(), now.getMonth() - idx, 1);
+          const endDate = new Date(now.getFullYear(), now.getMonth() - idx + 1, 0, 23, 59, 59);
+          const monthName = startDate.toLocaleString('en-GB', { month: 'short' });
+
+          return {
+            monthName,
+            start: startDate.toISOString().split('T')[0],
+            end: endDate.toISOString().split('T')[0],
+          };
         });
-        
-        results.push({
-          month: monthName,
-          revenue: stats.revenue,
-          orders: stats.orders,
-        });
-      } catch (error) {
-        results.push({ month: monthName, revenue: 0, orders: 0 });
-      }
-    }
-    
-    return results;
+
+        // Fetch ALL months in parallel
+        const results = await Promise.all(
+          monthRanges.map(async ({ monthName, start, end }) => {
+            try {
+              const stats = await withTimeout(
+                this.getOrderStats('custom', { start, end }),
+                API_TIMEOUT,
+                { revenue: 0, orders: 0, avgOrderValue: 0 }
+              );
+              return { month: monthName, revenue: stats.revenue, orders: stats.orders };
+            } catch {
+              return { month: monthName, revenue: 0, orders: 0 };
+            }
+          })
+        );
+
+        return results;
+      },
+      CACHE_TTL.monthly
+    );
   }
 
   async getChurnData(): Promise<{ churnRate: number; cancelledThisMonth: number; activeStart: number } | null> {
-    try {
-      // Get cancelled subscriptions this month
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const cancelledUrl = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
-      cancelledUrl.searchParams.set('per_page', '100');
-      cancelledUrl.searchParams.set('status', 'cancelled');
-      
-      const cancelledResponse = await fetch(cancelledUrl.toString(), {
-        headers: {
-          'Authorization': this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        cache: 'no-store',
-      });
+    const cacheKey = `woo:${this.config.name}:churn`;
 
-      if (!cancelledResponse.ok) {
-        return null;
-      }
+    return cached(
+      cacheKey,
+      async () => {
+        try {
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const cancelledSubs = await cancelledResponse.json();
-      
-      // Count cancellations this month
-      const cancelledThisMonth = cancelledSubs.filter((sub: any) => {
-        const cancelDate = new Date(sub.date_modified || sub.date_created);
-        return cancelDate >= monthStart;
-      }).length;
+          const cancelledUrl = new URL(`${this.config.url}/wp-json/wc/v3/subscriptions`);
+          cancelledUrl.searchParams.set('per_page', '100');
+          cancelledUrl.searchParams.set('status', 'cancelled');
 
-      // Get active subscriptions
-      const activeSubs = await this.getSubscriptions();
-      const activeCount = activeSubs.length;
-      
-      // Estimate start of month active (current + cancelled this month)
-      const activeStart = activeCount + cancelledThisMonth;
-      const churnRate = activeStart > 0 ? (cancelledThisMonth / activeStart) * 100 : 0;
+          const cancelledSubs = await withTimeout(
+            fetch(cancelledUrl.toString(), {
+              headers: {
+                'Authorization': this.getAuthHeader(),
+                'Content-Type': 'application/json',
+              },
+            }).then(async (r) => (r.ok ? r.json() : [])),
+            API_TIMEOUT,
+            []
+          );
 
-      return {
-        churnRate: Math.round(churnRate * 10) / 10,
-        cancelledThisMonth,
-        activeStart,
-      };
-    } catch (error) {
-      console.error('Error fetching churn data:', error);
-      return null;
-    }
+          const cancelledThisMonth = cancelledSubs.filter((sub: { date_modified?: string; date_created: string }) => {
+            const cancelDate = new Date(sub.date_modified || sub.date_created);
+            return cancelDate >= monthStart;
+          }).length;
+
+          const activeSubs = await this.getSubscriptions();
+          const activeCount = activeSubs.length;
+          const activeStart = activeCount + cancelledThisMonth;
+          const churnRate = activeStart > 0 ? (cancelledThisMonth / activeStart) * 100 : 0;
+
+          return {
+            churnRate: Math.round(churnRate * 10) / 10,
+            cancelledThisMonth,
+            activeStart,
+          };
+        } catch {
+          return null;
+        }
+      },
+      CACHE_TTL.subscriptions
+    );
   }
 }
 
@@ -321,11 +391,9 @@ export function getFirebloodWoo(): WooCommerceService | null {
   const key = process.env.WOOCOMMERCE_FIREBLOOD_KEY;
   const secret = process.env.WOOCOMMERCE_FIREBLOOD_SECRET;
 
-  if (!url || !key || !secret) {
-    return null;
-  }
+  if (!url || !key || !secret) return null;
 
-  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret, name: 'fireblood' });
 }
 
 export function getTopgWoo(): WooCommerceService | null {
@@ -333,11 +401,9 @@ export function getTopgWoo(): WooCommerceService | null {
   const key = process.env.WOOCOMMERCE_TOPG_KEY;
   const secret = process.env.WOOCOMMERCE_TOPG_SECRET;
 
-  if (!url || !key || !secret) {
-    return null;
-  }
+  if (!url || !key || !secret) return null;
 
-  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret, name: 'topg' });
 }
 
 export function getDngWoo(): WooCommerceService | null {
@@ -345,9 +411,7 @@ export function getDngWoo(): WooCommerceService | null {
   const key = process.env.WOOCOMMERCE_DNG_KEY;
   const secret = process.env.WOOCOMMERCE_DNG_SECRET;
 
-  if (!url || !key || !secret) {
-    return null;
-  }
+  if (!url || !key || !secret) return null;
 
-  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret });
+  return new WooCommerceService({ url, consumerKey: key, consumerSecret: secret, name: 'dng' });
 }
