@@ -176,6 +176,8 @@ export class WooCommerceService {
         url.searchParams.set('per_page', '100');
         url.searchParams.set('status', 'active');
 
+        console.log(`[WooCommerce:${this.config.name}] Fetching subscriptions from: ${url.toString().replace(/consumer_key=\w+/, 'consumer_key=***')}`);
+
         const result = await withTimeout(
           fetch(url.toString(), {
             headers: {
@@ -183,8 +185,15 @@ export class WooCommerceService {
               'Content-Type': 'application/json',
             },
           }).then(async (response) => {
-            if (!response.ok) return [];
-            return response.json();
+            console.log(`[WooCommerce:${this.config.name}] Subscriptions response: ${response.status} ${response.statusText}`);
+            if (!response.ok) {
+              const text = await response.text().catch(() => 'no body');
+              console.error(`[WooCommerce:${this.config.name}] Subscriptions error body:`, text.substring(0, 200));
+              return [];
+            }
+            const data = await response.json();
+            console.log(`[WooCommerce:${this.config.name}] Subscriptions found: ${Array.isArray(data) ? data.length : 'not array'}`);
+            return data;
           }),
           API_TIMEOUT,
           []

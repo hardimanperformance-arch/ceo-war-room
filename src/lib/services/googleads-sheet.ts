@@ -60,6 +60,7 @@ export class GoogleAdsSheetService {
       cacheKey,
       async () => {
         try {
+          console.log(`[GoogleAds] Fetching sheet: ${sheetName} from spreadsheet: ${this.spreadsheetId}`);
           const response = await withTimeout(
             this.sheets.spreadsheets.values.get({
               spreadsheetId: this.spreadsheetId,
@@ -69,9 +70,13 @@ export class GoogleAdsSheetService {
             null
           );
 
-          if (!response) return [];
+          if (!response) {
+            console.log(`[GoogleAds] Sheet ${sheetName}: timeout or null response`);
+            return [];
+          }
 
           const rows = response.data.values || [];
+          console.log(`[GoogleAds] Sheet ${sheetName}: found ${rows.length} rows`);
 
           return rows.map((row: string[]) => ({
             account: row[0] || '',
@@ -87,7 +92,8 @@ export class GoogleAdsSheetService {
             cpa: parseFloat(row[10]) || 0,
             roas: parseFloat(row[11]) || 0,
           }));
-        } catch {
+        } catch (error) {
+          console.error(`[GoogleAds] Sheet ${sheetName} error:`, error);
           return [];
         }
       },
