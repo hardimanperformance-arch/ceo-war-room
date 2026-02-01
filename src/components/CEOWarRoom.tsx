@@ -111,32 +111,34 @@ const formatCurrency = (value: number, decimals = 0): string => {
 interface MetricCardProps {
   metric: MetricWithDelta;
   comparisonLabel?: string;
+  compact?: boolean;
 }
 
-const MetricCard = memo(function MetricCard({ metric, comparisonLabel }: MetricCardProps) {
+const MetricCard = memo(function MetricCard({ metric, comparisonLabel, compact }: MetricCardProps) {
   const hasDelta = metric.deltaPercent !== undefined && metric.deltaPercent !== null;
   const deltaDirection = hasDelta
     ? metric.deltaPercent! > 0.5 ? 'up' : metric.deltaPercent! < -0.5 ? 'down' : 'flat'
     : null;
 
   return (
-    <div className={`metric-card p-4 rounded-xl border-2 ${getStatusBg(metric.status)} transition-all`}>
+    <div className={`metric-card p-3 md:p-4 rounded-xl border-2 ${getStatusBg(metric.status)} transition-all`}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm text-zinc-400 truncate">{metric.label}</span>
+        <span className="text-xs md:text-sm text-zinc-400 truncate pr-1">{metric.label}</span>
         {metric.isLive && (
-          <span className="w-2 h-2 rounded-full bg-emerald-500 pulse-dot" />
+          <span className="w-2 h-2 rounded-full bg-emerald-500 pulse-dot flex-shrink-0" />
         )}
       </div>
-      <div className="flex items-end justify-between gap-2">
-        <div
-          className="text-xl md:text-2xl font-black text-white truncate tabular-nums"
-          style={metric.color ? { color: metric.color } : {}}
-        >
-          {metric.value}
-        </div>
-        {hasDelta ? (
-          <div className="flex flex-col items-end">
-            <div className={`text-sm font-bold whitespace-nowrap tabular-nums ${
+      {hasDelta ? (
+        /* Compare mode: stack value and delta vertically for more space */
+        <div className="space-y-1">
+          <div
+            className="text-lg md:text-xl lg:text-2xl font-black text-white truncate tabular-nums"
+            style={metric.color ? { color: metric.color } : {}}
+          >
+            {metric.value}
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <div className={`text-xs md:text-sm font-bold tabular-nums ${
               deltaDirection === 'up' ? 'text-emerald-400' :
               deltaDirection === 'down' ? 'text-red-400' : 'text-zinc-400'
             }`}>
@@ -144,20 +146,31 @@ const MetricCard = memo(function MetricCard({ metric, comparisonLabel }: MetricC
               {metric.deltaPercent! > 0 ? '+' : ''}{metric.deltaPercent!.toFixed(1)}%
             </div>
             {metric.previousValue && (
-              <div className="text-xs text-zinc-500 whitespace-nowrap">
+              <div className="text-xs text-zinc-500 truncate hidden sm:block" title={`was ${metric.previousValue}`}>
                 was {metric.previousValue}
               </div>
             )}
           </div>
-        ) : metric.change && (
-          <div className={`text-xs font-bold whitespace-nowrap ${
-            metric.changeType === 'positive' ? 'text-emerald-400' :
-            metric.changeType === 'negative' ? 'text-red-400' : 'text-zinc-400'
-          }`}>
-            {metric.change}
+        </div>
+      ) : (
+        /* Non-compare mode: side by side */
+        <div className="flex items-end justify-between gap-2">
+          <div
+            className="text-lg md:text-xl lg:text-2xl font-black text-white truncate tabular-nums"
+            style={metric.color ? { color: metric.color } : {}}
+          >
+            {metric.value}
           </div>
-        )}
-      </div>
+          {metric.change && (
+            <div className={`text-xs font-bold whitespace-nowrap ${
+              metric.changeType === 'positive' ? 'text-emerald-400' :
+              metric.changeType === 'negative' ? 'text-red-400' : 'text-zinc-400'
+            }`}>
+              {metric.change}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -228,12 +241,13 @@ interface OverviewTabProps {
   metricsWithDeltas: MetricWithDelta[];
   comparisonLabel?: string;
   comparisonLoading?: boolean;
+  comparisonEnabled?: boolean;
   previousData: DashboardData | null;
   period: TimePeriod;
   tab: TabId;
 }
 
-const OverviewTab = memo(function OverviewTab({ data, metricsWithDeltas, comparisonLabel, comparisonLoading, previousData, period, tab }: OverviewTabProps) {
+const OverviewTab = memo(function OverviewTab({ data, metricsWithDeltas, comparisonLabel, comparisonLoading, comparisonEnabled, previousData, period, tab }: OverviewTabProps) {
   const trafficTotals = useMemo(() => {
     if (!data.trafficOverview?.length) return null;
     const sessions = data.trafficOverview.reduce((sum, r) => sum + r.sessions, 0);
@@ -254,10 +268,15 @@ const OverviewTab = memo(function OverviewTab({ data, metricsWithDeltas, compari
     };
   }, [data.adsOverview]);
 
+  // Use fewer columns when comparison is enabled (cards need more space for delta info)
+  const gridCols = comparisonEnabled
+    ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
+    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+      <div className={`grid ${gridCols} gap-3 md:gap-4`}>
         {metricsWithDeltas.map((metric) => (
           <MetricCard key={metric.label} metric={metric} comparisonLabel={comparisonLabel} />
         ))}
@@ -476,15 +495,21 @@ interface BrandTabProps {
   metricsWithDeltas: MetricWithDelta[];
   comparisonLabel?: string;
   comparisonLoading?: boolean;
+  comparisonEnabled?: boolean;
   previousData: DashboardData | null;
   period: TimePeriod;
 }
 
-const BrandTab = memo(function BrandTab({ data, brandId, metricsWithDeltas, comparisonLabel, comparisonLoading, previousData, period }: BrandTabProps) {
+const BrandTab = memo(function BrandTab({ data, brandId, metricsWithDeltas, comparisonLabel, comparisonLoading, comparisonEnabled, previousData, period }: BrandTabProps) {
+  // Use fewer columns when comparison is enabled (cards need more space for delta info)
+  const gridCols = comparisonEnabled
+    ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
+    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+      <div className={`grid ${gridCols} gap-3 md:gap-4`}>
         {metricsWithDeltas.map((metric) => (
           <MetricCard key={metric.label} metric={metric} comparisonLabel={comparisonLabel} />
         ))}
@@ -784,6 +809,7 @@ export default function CEOWarRoom() {
           metricsWithDeltas={metricsWithDeltas}
           comparisonLabel={comparisonLabel}
           comparisonLoading={comparisonLoading}
+          comparisonEnabled={comparisonEnabled}
           previousData={comparisonData}
           period={timePeriod}
           tab={activeTab}
@@ -798,11 +824,12 @@ export default function CEOWarRoom() {
         metricsWithDeltas={metricsWithDeltas}
         comparisonLabel={comparisonLabel}
         comparisonLoading={comparisonLoading}
+        comparisonEnabled={comparisonEnabled}
         previousData={comparisonData}
         period={timePeriod}
       />
     );
-  }, [loading, error, data, activeTab, timePeriod, customRange, fetchData, metricsWithDeltas, comparisonLabel, comparisonLoading, comparisonData]);
+  }, [loading, error, data, activeTab, timePeriod, customRange, fetchData, metricsWithDeltas, comparisonLabel, comparisonLoading, comparisonData, comparisonEnabled]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
