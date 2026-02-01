@@ -4,6 +4,8 @@
 import { getFirebloodWoo, getTopgWoo, getDngWoo } from '../services/woocommerce';
 import { getFirebloodGA4, getTopgGA4, getDngGA4 } from '../services/ga4';
 import { getGoogleAdsSheetService } from '../services/googleads-sheet';
+import { getPeriodDates, formatForApi } from '../utils/period';
+import type { TimePeriod } from '../../types/dashboard';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -38,6 +40,16 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
   const dngGA4 = getDngGA4();
   const adsService = getGoogleAdsSheetService();
 
+  // Calculate consistent date range ONCE for all services
+  // This fixes the mismatch where WooCommerce used calendar month but GA4 used rolling 30 days
+  const customRange = dateRange
+    ? dateRange
+    : (() => {
+        const periodDates = getPeriodDates(period as TimePeriod);
+        const apiDates = formatForApi(periodDates);
+        return { start: apiDates.startDate, end: apiDates.endDate };
+      })();
+
   try {
     // SINGLE Promise.all for everything - must complete within Vercel's 10s limit
     const [
@@ -53,14 +65,14 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
       topgMonthly,
       dngMonthly,
     ] = await Promise.all([
-      // WooCommerce order stats
-      safeCall(() => firebloodWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
-      safeCall(() => topgWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
-      safeCall(() => dngWoo?.getOrderStats(period, dateRange) ?? Promise.resolve(null)),
-      // GA4 traffic
-      safeCall(() => firebloodGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
-      safeCall(() => topgGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
-      safeCall(() => dngGA4?.getTrafficStats(period, dateRange) ?? Promise.resolve(null)),
+      // WooCommerce order stats - use 'custom' with calculated range for consistency
+      safeCall(() => firebloodWoo?.getOrderStats('custom', customRange) ?? Promise.resolve(null)),
+      safeCall(() => topgWoo?.getOrderStats('custom', customRange) ?? Promise.resolve(null)),
+      safeCall(() => dngWoo?.getOrderStats('custom', customRange) ?? Promise.resolve(null)),
+      // GA4 traffic - use 'custom' with calculated range for consistency
+      safeCall(() => firebloodGA4?.getTrafficStats('custom', customRange) ?? Promise.resolve(null)),
+      safeCall(() => topgGA4?.getTrafficStats('custom', customRange) ?? Promise.resolve(null)),
+      safeCall(() => dngGA4?.getTrafficStats('custom', customRange) ?? Promise.resolve(null)),
       // Google Ads
       safeCall(() => adsService?.getAccountSummary('Fireblood') ?? Promise.resolve(null)),
       safeCall(() => adsService?.getAccountSummary('TopG') ?? Promise.resolve(null)),
@@ -99,13 +111,19 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     const dngSessions = dngGA4Stats?.sessions || 0;
     const totalSessions = fbSessions + topgSessions + dngSessions;
 
+    // Unique users (better for true conversion rate)
+    const fbUsers = fbGA4?.totalUsers || 0;
+    const topgUsers = topgGA4Stats?.totalUsers || 0;
+    const dngUsers = dngGA4Stats?.totalUsers || 0;
+    const totalUsers = fbUsers + topgUsers + dngUsers;
+
     const periodLabel = period === 'custom' && dateRange
       ? `${dateRange.start} - ${dateRange.end}`
       : periodLabels[period];
 
-    // Calculate blended conversion rate
-    const conversionRate = totalSessions > 0
-      ? ((totalOrders / totalSessions) * 100).toFixed(2)
+    // Calculate blended conversion rate using unique users (not sessions)
+    const conversionRate = totalUsers > 0
+      ? ((totalOrders / totalUsers) * 100).toFixed(2)
       : null;
 
     const metrics = [
@@ -169,44 +187,45 @@ export async function getOverviewData(period: Period = 'month', dateRange?: Date
     ];
 
     // Traffic Overview by Brand (GA4 data)
+    // Conv rate uses unique users, not sessions
     const trafficOverview = [
       {
         brand: 'Fireblood',
         color: '#FF4757',
         sessions: fbSessions,
-        users: fbGA4?.totalUsers || 0,
+        users: fbUsers,
         newUsers: fbGA4?.newUsers || 0,
         bounceRate: fbGA4?.bounceRate || 0,
         avgDuration: fbGA4?.avgSessionDuration || 0,
         pageViews: fbGA4?.pageViews || 0,
         orders: fbOrders,
-        convRate: fbSessions > 0 ? ((fbOrders / fbSessions) * 100) : 0,
+        convRate: fbUsers > 0 ? ((fbOrders / fbUsers) * 100) : 0,
         isLive: !!fbGA4,
       },
       {
         brand: 'Top G',
         color: '#00E676',
         sessions: topgSessions,
-        users: topgGA4Stats?.totalUsers || 0,
+        users: topgUsers,
         newUsers: topgGA4Stats?.newUsers || 0,
         bounceRate: topgGA4Stats?.bounceRate || 0,
         avgDuration: topgGA4Stats?.avgSessionDuration || 0,
         pageViews: topgGA4Stats?.pageViews || 0,
         orders: topgOrders,
-        convRate: topgSessions > 0 ? ((topgOrders / topgSessions) * 100) : 0,
+        convRate: topgUsers > 0 ? ((topgOrders / topgUsers) * 100) : 0,
         isLive: !!topgGA4Stats,
       },
       {
         brand: 'DNG',
         color: '#AA80FF',
         sessions: dngSessions,
-        users: dngGA4Stats?.totalUsers || 0,
+        users: dngUsers,
         newUsers: dngGA4Stats?.newUsers || 0,
         bounceRate: dngGA4Stats?.bounceRate || 0,
         avgDuration: dngGA4Stats?.avgSessionDuration || 0,
         pageViews: dngGA4Stats?.pageViews || 0,
         orders: dngOrders,
-        convRate: dngSessions > 0 ? ((dngOrders / dngSessions) * 100) : 0,
+        convRate: dngUsers > 0 ? ((dngOrders / dngUsers) * 100) : 0,
         isLive: !!dngGA4Stats,
       },
     ];
