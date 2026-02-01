@@ -596,7 +596,7 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
         )}
 
         {/* Acquirer Scorecard - Main Feature */}
-        {data.acquirerScorecard && data.acquirerScorecard.length > 0 && (
+        {data.acquirerScorecard && data.acquirerScorecard.length > 0 ? (
           <div className={`${data.revenueBreakdown?.length ? 'lg:col-span-8' : 'lg:col-span-12'} rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6`}>
             <SectionHeader title="Acquirer Readiness Scorecard" badge="calculated" />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -615,6 +615,10 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
                 </div>
               ))}
             </div>
+          </div>
+        ) : (
+          <div className="lg:col-span-8 rounded-xl bg-zinc-900/80 border-2 border-red-500/50 p-4 md:p-6">
+            <div className="text-red-400 font-bold">Scorecard Debug: {data.acquirerScorecard ? `${data.acquirerScorecard.length} items` : 'null/undefined'}</div>
           </div>
         )}
       </div>
