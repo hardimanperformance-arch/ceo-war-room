@@ -65,13 +65,13 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
       // Google Ads
       adsData,
     ] = await Promise.all([
-      firebloodWoo?.getOrderStats('custom', customRange) ?? null,
-      firebloodWoo?.getTopProducts('custom', customRange, 10) ?? null,
-      firebloodWoo?.getSubscriptionStats() ?? null,
-      firebloodWoo?.getChurnData() ?? null,
-      topgWoo?.getOrderStatsByProductName('custom', customRange, FIREBLOOD_FILTER) ?? null,
-      ga4?.getTrafficStats('custom', customRange) ?? null,
-      adsService?.getAccountSummary('Fireblood').catch((e) => { console.error('[Fireblood+] Ads error:', e); return null; }) ?? null,
+      firebloodWoo?.getOrderStats('custom', customRange).catch(e => { console.error('[Fireblood+] Order stats error:', e); return null; }) ?? null,
+      firebloodWoo?.getTopProducts('custom', customRange, 10).catch(e => { console.error('[Fireblood+] Top products error:', e); return null; }) ?? null,
+      firebloodWoo?.getSubscriptionStats().catch(e => { console.error('[Fireblood+] Subscription stats error:', e); return null; }) ?? null,
+      firebloodWoo?.getChurnData().catch(e => { console.error('[Fireblood+] Churn data error:', e); return null; }) ?? null,
+      topgWoo?.getOrderStatsByProductName('custom', customRange, FIREBLOOD_FILTER).catch(e => { console.error('[Fireblood+] TopG stats error:', e); return null; }) ?? null,
+      ga4?.getTrafficStats('custom', customRange).catch(e => { console.error('[Fireblood+] GA4 error:', e); return null; }) ?? null,
+      adsService?.getAccountSummary('Fireblood').catch(e => { console.error('[Fireblood+] Ads error:', e); return null; }) ?? null,
     ]);
 
     console.log('[Fireblood+] Data fetched:', {
