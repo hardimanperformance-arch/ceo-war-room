@@ -517,6 +517,14 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
   previousData,
   period,
 }: FirebloodPlusTabProps) {
+  // Debug logging
+  console.log('[Fireblood+ Tab] Data received:', {
+    hasScorecard: !!data.acquirerScorecard,
+    scorecardLength: data.acquirerScorecard?.length ?? 0,
+    scorecardItems: data.acquirerScorecard?.map(s => s.metric) ?? [],
+    hasRevenueBreakdown: !!data.revenueBreakdown,
+  });
+
   const gridCols = comparisonEnabled
     ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
     : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';

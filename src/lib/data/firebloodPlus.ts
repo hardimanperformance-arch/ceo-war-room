@@ -268,6 +268,11 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
       { source: 'Top G (Fireblood)', value: topgFirebloodRevenue, color: '#00E676' },
     ];
 
+    console.log('[Fireblood+] Scorecard built:', {
+      scorecardLength: acquirerScorecard.length,
+      scorecard: acquirerScorecard.map(s => ({ metric: s.metric, current: s.current, status: s.status })),
+    });
+
     return {
       metrics,
       topProducts: combinedTopProducts,
