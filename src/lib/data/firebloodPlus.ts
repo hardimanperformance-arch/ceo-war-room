@@ -211,46 +211,56 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
     // DTC % calculation (Fireblood.com is DTC, Top G merch is also DTC)
     const dtcPct = 100; // Both channels are DTC
 
+    // Determine what's missing for better UX
+    const hasSubscriptions = !!subscriptionStats;
+    const hasChurn = !!churnData;
+    const hasAds = !!adsData;
+
     const acquirerScorecard = [
       {
         metric: 'Monthly Churn Rate',
-        current: churnData ? `${churnData.churnRate}%` : 'N/A',
+        current: hasChurn ? `${churnData.churnRate}%` : '⚠️ Setup Required',
         target: '<5%',
-        status: churnData ? (churnData.churnRate <= 5 ? 'good' : churnData.churnRate <= 8 ? 'warning' : 'critical') : 'warning',
+        status: hasChurn ? (churnData.churnRate <= 5 ? 'good' : churnData.churnRate <= 8 ? 'warning' : 'critical') : 'warning',
         weight: 'Critical',
-        isLive: !!churnData,
+        isLive: hasChurn,
+        setupHint: hasChurn ? null : 'WooCommerce Subscriptions',
       },
       {
         metric: 'Subscription % of Revenue',
-        current: subscriptionStats ? `${Math.round(subscriptionPct)}%` : 'N/A',
+        current: hasSubscriptions ? `${Math.round(subscriptionPct)}%` : '⚠️ Setup Required',
         target: '>50%',
-        status: subscriptionPct >= 50 ? 'good' : subscriptionPct >= 30 ? 'warning' : 'critical',
+        status: hasSubscriptions ? (subscriptionPct >= 50 ? 'good' : subscriptionPct >= 30 ? 'warning' : 'critical') : 'warning',
         weight: 'Critical',
-        isLive: !!subscriptionStats,
+        isLive: hasSubscriptions,
+        setupHint: hasSubscriptions ? null : 'WooCommerce Subscriptions',
       },
       {
         metric: 'CAC (Google Ads)',
-        current: cac ? `£${cac.toFixed(2)}` : 'N/A',
+        current: hasAds && cac ? `£${cac.toFixed(2)}` : '⚠️ Setup Required',
         target: '<£40',
         status: cac ? (cac <= 40 ? 'good' : cac <= 60 ? 'warning' : 'critical') : 'warning',
         weight: 'High',
         isLive: !!cac,
+        setupHint: hasAds ? null : 'Google Ads Sheet',
       },
       {
         metric: 'LTV:CAC Ratio',
-        current: ltvCacRatio ? `${ltvCacRatio.toFixed(1)}:1` : 'N/A',
+        current: ltvCacRatio ? `${ltvCacRatio.toFixed(1)}:1` : '⚠️ Setup Required',
         target: '>3:1',
         status: ltvCacRatio ? (ltvCacRatio >= 3 ? 'good' : ltvCacRatio >= 2 ? 'warning' : 'critical') : 'warning',
         weight: 'Critical',
         isLive: !!ltvCacRatio,
+        setupHint: ltvCacRatio ? null : 'Google Ads Sheet',
       },
       {
         metric: 'ROAS (Google Ads)',
-        current: roas ? `${roas.toFixed(2)}x` : 'N/A',
+        current: hasAds && roas ? `${roas.toFixed(2)}x` : '⚠️ Setup Required',
         target: '>2x',
         status: roas ? (roas >= 2 ? 'good' : roas >= 1.5 ? 'warning' : 'critical') : 'warning',
         weight: 'High',
         isLive: !!roas,
+        setupHint: hasAds ? null : 'Google Ads Sheet',
       },
       {
         metric: 'DTC % of Revenue',
@@ -259,6 +269,7 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
         status: 'good',
         weight: 'Medium',
         isLive: true,
+        setupHint: null,
       },
     ];
 

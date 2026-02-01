@@ -517,14 +517,6 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
   previousData,
   period,
 }: FirebloodPlusTabProps) {
-  // Debug logging
-  console.log('[Fireblood+ Tab] Data received:', {
-    hasScorecard: !!data.acquirerScorecard,
-    scorecardLength: data.acquirerScorecard?.length ?? 0,
-    scorecardItems: data.acquirerScorecard?.map(s => s.metric) ?? [],
-    hasRevenueBreakdown: !!data.revenueBreakdown,
-  });
-
   const gridCols = comparisonEnabled
     ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
     : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';
@@ -596,11 +588,11 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
         )}
 
         {/* Acquirer Scorecard - Main Feature */}
-        {data.acquirerScorecard && data.acquirerScorecard.length > 0 ? (
+        {data.acquirerScorecard && data.acquirerScorecard.length > 0 && (
           <div className={`${data.revenueBreakdown?.length ? 'lg:col-span-8' : 'lg:col-span-12'} rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6`}>
             <SectionHeader title="Acquirer Readiness Scorecard" badge="calculated" />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {data.acquirerScorecard.map((item) => (
+              {data.acquirerScorecard.map((item: { metric: string; current: string; target: string; status: string; weight: string; isLive: boolean; setupHint?: string | null }) => (
                 <div key={item.metric} className={`p-4 rounded-xl border-2 ${getStatusBg(item.status)}`}>
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-sm text-zinc-400">{item.metric}</span>
@@ -610,15 +602,14 @@ const FirebloodPlusTab = memo(function FirebloodPlusTab({
                       {item.weight}
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-black text-white">{item.current}</div>
+                  <div className={`text-xl md:text-2xl font-black ${item.isLive ? 'text-white' : 'text-amber-400'}`}>{item.current}</div>
                   <div className="text-sm text-zinc-400">Target: {item.target}</div>
+                  {item.setupHint && (
+                    <div className="text-xs text-amber-500 mt-1">Needs: {item.setupHint}</div>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="lg:col-span-8 rounded-xl bg-zinc-900/80 border-2 border-red-500/50 p-4 md:p-6">
-            <div className="text-red-400 font-bold">Scorecard Debug: {data.acquirerScorecard ? `${data.acquirerScorecard.length} items` : 'null/undefined'}</div>
           </div>
         )}
       </div>
