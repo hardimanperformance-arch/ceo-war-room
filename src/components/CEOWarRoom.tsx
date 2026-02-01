@@ -777,29 +777,6 @@ const BrandTab = memo(function BrandTab({ data, brandId, metricsWithDeltas, comp
         </div>
       )}
 
-      {/* Acquirer Scorecard (Fireblood only) */}
-      {data.acquirerScorecard && data.acquirerScorecard.length > 0 && (
-        <div className="rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6">
-          <SectionHeader title="Acquirer Readiness Scorecard" badge="calculated" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.acquirerScorecard.map((item) => (
-              <div key={item.metric} className={`p-4 rounded-xl border-2 ${getStatusBg(item.status)}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-sm text-zinc-400">{item.metric}</span>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    item.isLive ? 'bg-emerald-700/50 text-emerald-200' : 'bg-zinc-700/50 text-zinc-300'
-                  }`}>
-                    {item.weight}
-                  </span>
-                </div>
-                <div className="text-xl md:text-2xl font-black text-white">{item.current}</div>
-                <div className="text-sm text-zinc-400">Target: {item.target}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Email Stats (DNG only) */}
       {data.emailStats && (
         <div className="rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6">

@@ -33,8 +33,8 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
   const ga4 = getFirebloodGA4();
   const adsService = getGoogleAdsSheetService();
 
-  // Calculate consistent date range
-  const customRange = dateRange
+  // Calculate consistent date range (use start/end format for WooCommerce)
+  const customRange: DateRange = dateRange
     ? dateRange
     : (() => {
         const periodDates = getPeriodDates(period as TimePeriod);
@@ -42,7 +42,16 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
         return { start: apiDates.startDate, end: apiDates.endDate };
       })();
 
+  console.log('[Fireblood+] Fetching data for range:', customRange);
+
   try {
+    console.log('[Fireblood+] Services available:', {
+      firebloodWoo: !!firebloodWoo,
+      topgWoo: !!topgWoo,
+      ga4: !!ga4,
+      adsService: !!adsService,
+    });
+
     const [
       // Fireblood store - full stats
       firebloodStats,
@@ -62,8 +71,16 @@ export async function getFirebloodPlusData(period: Period = 'month', dateRange?:
       firebloodWoo?.getChurnData() ?? null,
       topgWoo?.getOrderStatsByProductName('custom', customRange, FIREBLOOD_FILTER) ?? null,
       ga4?.getTrafficStats('custom', customRange) ?? null,
-      adsService?.getAccountSummary('Fireblood').catch(() => null) ?? null,
+      adsService?.getAccountSummary('Fireblood').catch((e) => { console.error('[Fireblood+] Ads error:', e); return null; }) ?? null,
     ]);
+
+    console.log('[Fireblood+] Data fetched:', {
+      firebloodStats: !!firebloodStats,
+      subscriptionStats: !!subscriptionStats,
+      churnData: !!churnData,
+      topgFirebloodStats: !!topgFirebloodStats,
+      adsData: !!adsData,
+    });
 
     // Combine revenue from both sources
     const firebloodRevenue = firebloodStats?.revenue || 0;
