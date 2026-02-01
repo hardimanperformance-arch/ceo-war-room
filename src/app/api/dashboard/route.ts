@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getOverviewData } from '../../../lib/data/overview';
 import { getFirebloodData } from '../../../lib/data/fireblood';
+import { getFirebloodPlusData } from '../../../lib/data/firebloodPlus';
 import { getGtopData } from '../../../lib/data/gtop';
 import { getDngData } from '../../../lib/data/dng';
 
@@ -10,20 +11,23 @@ export async function GET(request: Request) {
   const period = (searchParams.get('period') || 'month') as 'today' | 'week' | 'month' | 'year' | 'custom';
   const startDate = searchParams.get('startDate') || undefined;
   const endDate = searchParams.get('endDate') || undefined;
-  
-  const dateRange = period === 'custom' && startDate && endDate 
+
+  const dateRange = period === 'custom' && startDate && endDate
     ? { start: startDate, end: endDate }
     : undefined;
-  
+
   try {
     let data;
-    
+
     switch (tab) {
       case 'overview':
         data = await getOverviewData(period, dateRange);
         break;
       case 'fireblood':
         data = await getFirebloodData(period, dateRange);
+        break;
+      case 'fireblood-plus':
+        data = await getFirebloodPlusData(period, dateRange);
         break;
       case 'gtop':
         data = await getGtopData(period, dateRange);
@@ -34,7 +38,7 @@ export async function GET(request: Request) {
       default:
         data = await getOverviewData(period, dateRange);
     }
-    
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Dashboard API Error:', error);

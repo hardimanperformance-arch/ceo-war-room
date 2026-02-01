@@ -489,6 +489,209 @@ const OverviewTab = memo(function OverviewTab({ data, metricsWithDeltas, compari
   );
 });
 
+// Fireblood+ Tab - Consolidated brand view
+interface FirebloodPlusTabProps {
+  data: BrandData & {
+    revenueBreakdown?: { source: string; value: number; color: string }[];
+    consolidatedSummary?: {
+      totalRevenue: number;
+      firebloodRevenue: number;
+      topgFirebloodRevenue: number;
+      topgContributionPct: number;
+    };
+  };
+  metricsWithDeltas: MetricWithDelta[];
+  comparisonLabel?: string;
+  comparisonLoading?: boolean;
+  comparisonEnabled?: boolean;
+  previousData: DashboardData | null;
+  period: TimePeriod;
+}
+
+const FirebloodPlusTab = memo(function FirebloodPlusTab({
+  data,
+  metricsWithDeltas,
+  comparisonLabel,
+  comparisonLoading,
+  comparisonEnabled,
+  previousData,
+  period,
+}: FirebloodPlusTabProps) {
+  const gridCols = comparisonEnabled
+    ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'
+    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';
+
+  const topgPct = data.consolidatedSummary?.topgContributionPct || 0;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Consolidated Banner */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-red-950/50 to-emerald-950/50 border-2 border-red-500/30">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🚀</span>
+          <div>
+            <h2 className="text-lg font-black text-white">Fireblood Brand Consolidated</h2>
+            <p className="text-sm text-zinc-400">
+              Combines fireblood.com + Fireblood items from merch.topg.com
+              {topgPct > 0 && (
+                <span className="ml-2 text-emerald-400">
+                  (Top G contributes {topgPct.toFixed(1)}% of brand revenue)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Metrics Grid */}
+      <div className={`grid ${gridCols} gap-3 md:gap-4`}>
+        {metricsWithDeltas.map((metric) => (
+          <MetricCard key={metric.label} metric={metric} comparisonLabel={comparisonLabel} />
+        ))}
+      </div>
+
+      {/* Comparison Loading */}
+      {comparisonLoading && (
+        <div className="text-center text-zinc-500 text-sm animate-pulse">
+          Loading comparison data...
+        </div>
+      )}
+
+      {/* Revenue Breakdown + Acquirer Scorecard Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Revenue Breakdown Pie */}
+        {data.revenueBreakdown && data.revenueBreakdown.length > 0 && (
+          <div className="lg:col-span-4 rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6">
+            <SectionHeader title="Revenue by Source" badge="live" />
+            <div className="h-[200px] md:h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data.revenueBreakdown}
+                    dataKey="value"
+                    nameKey="source"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {data.revenueBreakdown.map((entry) => (
+                      <Cell key={entry.source} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Acquirer Scorecard - Main Feature */}
+        {data.acquirerScorecard && data.acquirerScorecard.length > 0 && (
+          <div className={`${data.revenueBreakdown?.length ? 'lg:col-span-8' : 'lg:col-span-12'} rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6`}>
+            <SectionHeader title="Acquirer Readiness Scorecard" badge="calculated" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {data.acquirerScorecard.map((item) => (
+                <div key={item.metric} className={`p-4 rounded-xl border-2 ${getStatusBg(item.status)}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-sm text-zinc-400">{item.metric}</span>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      item.isLive ? 'bg-emerald-700/50 text-emerald-200' : 'bg-zinc-700/50 text-zinc-300'
+                    }`}>
+                      {item.weight}
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-black text-white">{item.current}</div>
+                  <div className="text-sm text-zinc-400">Target: {item.target}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* AI Insights */}
+      <AIInsights
+        currentData={data}
+        previousData={previousData}
+        metricsWithDeltas={metricsWithDeltas}
+        period={period}
+        tab="fireblood-plus"
+      />
+
+      {/* Top Products with Source */}
+      {data.topProducts?.length > 0 && (
+        <div className="rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6">
+          <SectionHeader title="Top Fireblood Products (All Channels)" badge="live" />
+          <div className="space-y-2">
+            {data.topProducts.map((product: { name: string; revenue: number; units: number; source?: string }) => (
+              <div key={product.name} className="p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white truncate">{product.name}</span>
+                    {product.source && (
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        product.source === 'both' ? 'bg-purple-500/20 text-purple-300' :
+                        product.source === 'merch.topg.com' ? 'bg-emerald-500/20 text-emerald-300' :
+                        'bg-red-500/20 text-red-300'
+                      }`}>
+                        {product.source === 'both' ? 'Both' :
+                         product.source === 'merch.topg.com' ? 'Top G' : 'Fireblood'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-emerald-400 font-bold tabular-nums whitespace-nowrap">
+                    {formatCurrency(product.revenue)}
+                  </span>
+                </div>
+                <div className="text-sm text-zinc-400 mt-1">
+                  {product.units.toLocaleString()} units sold
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Metrics */}
+      {data.subscriptionMetrics && (
+        <div className="rounded-xl bg-zinc-900/80 border-2 border-zinc-800 p-4 md:p-6">
+          <SectionHeader title="Subscriptions (Fireblood.com)" badge="live" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-zinc-800/50">
+              <div className="text-sm text-zinc-400">Active Subscribers</div>
+              <div className="text-2xl md:text-3xl font-black text-white tabular-nums">
+                {data.subscriptionMetrics.activeSubscribers?.toLocaleString() ?? 'N/A'}
+              </div>
+            </div>
+            <div className="p-4 rounded-lg bg-zinc-800/50">
+              <div className="text-sm text-zinc-400">MRR</div>
+              <div className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums">
+                {data.subscriptionMetrics.mrr != null ? formatCurrency(data.subscriptionMetrics.mrr) : 'N/A'}
+              </div>
+            </div>
+            <div className={`p-4 rounded-lg ${
+              data.subscriptionMetrics.churnRate && data.subscriptionMetrics.churnRate > 5
+                ? 'bg-amber-950/50 border border-amber-500/50'
+                : 'bg-zinc-800/50'
+            }`}>
+              <div className="text-sm text-zinc-400">Monthly Churn</div>
+              <div className={`text-2xl md:text-3xl font-black tabular-nums ${
+                data.subscriptionMetrics.churnRate && data.subscriptionMetrics.churnRate > 5
+                  ? 'text-amber-400'
+                  : 'text-white'
+              }`}>
+                {data.subscriptionMetrics.churnRate != null ? `${data.subscriptionMetrics.churnRate}%` : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 interface BrandTabProps {
   data: BrandData;
   brandId: TabId;
@@ -634,6 +837,7 @@ const BrandTab = memo(function BrandTab({ data, brandId, metricsWithDeltas, comp
 const TABS: Tab[] = [
   { id: 'overview', label: 'Overview', icon: '📊', color: '#ffffff' },
   { id: 'fireblood', label: 'Fireblood', icon: '🔥', color: '#FF4757' },
+  { id: 'fireblood-plus', label: 'Fireblood+', icon: '🚀', color: '#FF4757' },
   { id: 'gtop', label: 'Gtop', icon: '👕', color: '#00E676' },
   { id: 'dng', label: 'DNG', icon: '📚', color: '#AA80FF' },
 ];
@@ -813,6 +1017,20 @@ export default function CEOWarRoom() {
           previousData={comparisonData}
           period={timePeriod}
           tab={activeTab}
+        />
+      );
+    }
+
+    if (activeTab === 'fireblood-plus') {
+      return (
+        <FirebloodPlusTab
+          data={data as BrandData & { revenueBreakdown?: { source: string; value: number; color: string }[]; consolidatedSummary?: { totalRevenue: number; firebloodRevenue: number; topgFirebloodRevenue: number; topgContributionPct: number } }}
+          metricsWithDeltas={metricsWithDeltas}
+          comparisonLabel={comparisonLabel}
+          comparisonLoading={comparisonLoading}
+          comparisonEnabled={comparisonEnabled}
+          previousData={comparisonData}
+          period={timePeriod}
         />
       );
     }

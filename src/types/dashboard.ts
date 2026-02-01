@@ -121,7 +121,7 @@ export interface DateRange {
 
 export type TimePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
-export type TabId = 'overview' | 'fireblood' | 'gtop' | 'dng';
+export type TabId = 'overview' | 'fireblood' | 'fireblood-plus' | 'gtop' | 'dng';
 
 export interface Tab {
   id: TabId;

@@ -362,6 +362,72 @@ export class WooCommerceService {
     );
   }
 
+  /**
+   * Get order stats filtered by product name (for cross-store brand aggregation)
+   * Fetches all orders and filters to items matching the nameFilter
+   */
+  async getOrderStatsByProductName(
+    period: Period = 'month',
+    customRange?: DateRange,
+    nameFilter?: string
+  ): Promise<{ revenue: number; orders: number; avgOrderValue: number; matchingProducts: { name: string; revenue: number; units: number }[] }> {
+    if (!nameFilter) {
+      // No filter = use regular getOrderStats
+      const stats = await this.getOrderStats(period, customRange);
+      return { ...stats, matchingProducts: [] };
+    }
+
+    const { after, before } = this.getDateRange(period, customRange);
+    const cacheKey = `woo:${this.config.name}:filtered:${nameFilter}:${after}:${before}`;
+    const filterLower = nameFilter.toLowerCase();
+
+    return cached(
+      cacheKey,
+      async () => {
+        try {
+          // Fetch orders (we need line items, so can't use reports API)
+          const orders = await this.getOrders(period, customRange);
+
+          let totalRevenue = 0;
+          const orderIdsWithMatch = new Set<number>();
+          const productMap = new Map<string, { revenue: number; units: number }>();
+
+          for (const order of orders) {
+            for (const item of order.line_items) {
+              if (item.name.toLowerCase().includes(filterLower)) {
+                const itemRevenue = parseFloat(item.total) || 0;
+                totalRevenue += itemRevenue;
+                orderIdsWithMatch.add(order.id);
+
+                const existing = productMap.get(item.name) || { revenue: 0, units: 0 };
+                existing.revenue += itemRevenue;
+                existing.units += item.quantity || 0;
+                productMap.set(item.name, existing);
+              }
+            }
+          }
+
+          const orderCount = orderIdsWithMatch.size;
+          const avgOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+          const matchingProducts = Array.from(productMap.entries())
+            .map(([name, data]) => ({ name, revenue: Math.round(data.revenue), units: data.units }))
+            .sort((a, b) => b.revenue - a.revenue);
+
+          return {
+            revenue: Math.round(totalRevenue),
+            orders: orderCount,
+            avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+            matchingProducts,
+          };
+        } catch {
+          return { revenue: 0, orders: 0, avgOrderValue: 0, matchingProducts: [] };
+        }
+      },
+      CACHE_TTL.orders
+    );
+  }
+
   async getChurnData(): Promise<{ churnRate: number; cancelledThisMonth: number; activeStart: number } | null> {
     const cacheKey = `woo:${this.config.name}:churn`;
 
